@@ -1,10 +1,39 @@
 # ProtonDB Badges 🎮
 
-[![Latest Release](https://img.shields.io/github/v/release/bschelst/protondb-decky?label=version)](https://github.com/bschelst/protondb-decky/releases)
-[![License](https://img.shields.io/github/license/bschelst/protondb-decky)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/beallio/protondb-decky?label=version)](https://github.com/beallio/protondb-decky/releases)
+[![License](https://img.shields.io/github/license/beallio/protondb-decky)](LICENSE)
 [![Decky Loader](https://img.shields.io/badge/Decky-Loader-blue)](https://github.com/SteamDeckHomebrew/decky-loader)
 
 Display **tappable ProtonDB badges** on your Steam library and Store pages, with a **submit** button to report directly from Game Mode, a **compatibility analysis** modal (working status, report trends, Proton version breakdown, and recommended launch options), and **status icons** on library game covers. Badges and analysis are also available as an overlay on **Steam Store pages**.
+
+> ### 🍴 This is a fork
+>
+> This repository is a fork of [**bschelst/protondb-decky**](https://github.com/bschelst/protondb-decky).
+> It carries changes that are proposed upstream but not yet merged, so that they can
+> be installed before upstream accepts them. For the official plugin, use the upstream
+> repository or the Decky store.
+>
+> Releases here are versioned `<upstream version>+beallio.N` — for example
+> `v1.3.3+beallio.1` is the fork's first build on top of upstream v1.3.3.
+> Fork releases are published on the `fork-main` branch; `main` mirrors upstream unchanged.
+
+### Changes in this fork awaiting upstream integration
+
+| Change | Upstream PR | Status |
+|---|---|---|
+| **Focus-only library icons** — new setting to show ProtonDB status icons on library covers only while a game is focused, instead of on every tile. | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
+| **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
+
+Once a change is merged upstream it is dropped from this table and from the fork's
+own patch set at the next rebase onto upstream.
+
+### Installing a fork build
+
+Download `protondb-decky.zip` from the [releases page](https://github.com/beallio/protondb-decky/releases),
+then install it through Decky Loader's **Settings → Developer → Install Plugin from ZIP**.
+Uninstall the store version first — both use the same plugin name.
+
+---
 
 ![Dead by Daylight - Badge](./assets/20260520220425_1.jpg)
 
