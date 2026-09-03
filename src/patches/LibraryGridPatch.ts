@@ -6,6 +6,7 @@ import {
   updateCache,
   getAllCachedStatuses
 } from '../cache/protobDbCache'
+import { findSteamAppIdByName } from '../lib/steamSearch'
 
 declare const appStore: any
 
@@ -32,13 +33,6 @@ const pendingIds = new Set<string>()
 let isFetching = false
 let scanInterval: ReturnType<typeof setInterval> | null = null
 let lastPosition: string = ''
-
-function cleanString(str: string) {
-  return str
-    .replace(/['"@&™®]/g, '')
-    .toLowerCase()
-    .trim()
-}
 
 function isSteamGame(gameId: number): boolean {
   try {
@@ -73,26 +67,8 @@ async function resolveToSteamAppId(rawId: string): Promise<string | null> {
   try {
     const overview = appStore?.GetAppOverviewByGameID(num)
     const gameName = overview?.display_name
-    if (!gameName) {
-      resolveCache.set(rawId, null)
-      return null
-    }
-
-    const res = await fetchWithTimeout(
-      fetchNoCors(`https://steamcommunity.com/actions/SearchApps/${gameName}`)
-    )
-
-    if (res.status === 200) {
-      const options = await res.json()
-      if (!Array.isArray(options)) {
-        resolveCache.set(rawId, null)
-        return null
-      }
-      const cleaned = cleanString(gameName)
-      const match = options.find(
-        (o: any) => o?.name && cleanString(o.name) === cleaned
-      )
-      const steamId = match?.appid ?? null
+    if (gameName) {
+      const steamId = await findSteamAppIdByName(gameName)
       resolveCache.set(rawId, steamId)
       return steamId
     }
