@@ -43,7 +43,9 @@ const useBadgeData = (appId: string | undefined) => {
     async function loadData() {
       const cache = await getCache(appId as string)
 
-      if (cache?.tier) {
+      // 'pending' is always refetched below, so showing it first only puts a
+      // wrong tier on screen for the length of the request.
+      if (cache?.tier && cache.tier !== 'pending') {
         setProtonDBTier(cache.tier)
       }
       if (typeof cache?.linuxSupport !== 'undefined') {

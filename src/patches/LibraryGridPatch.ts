@@ -192,10 +192,9 @@ async function fetchAndCacheStatus(appId: string): Promise<string> {
         return 'unknown'
       }
       const status = data.working_status.status || 'unknown'
-      const existing = await getCache(appId)
+      // Only the analysis was fetched here. Writing a placeholder tier would
+      // leave the game page rendering it before its own fetch lands.
       await updateCache(appId, {
-        tier: existing?.tier || ('pending' as any),
-        linuxSupport: existing?.linuxSupport || false,
         analysis: data,
         lastUpdated: new Date().toISOString()
       })
@@ -213,8 +212,6 @@ async function cacheUnknown(appId: string) {
     const existing = await getCache(appId)
     if (!existing?.analysis) {
       await updateCache(appId, {
-        tier: existing?.tier || ('pending' as any),
-        linuxSupport: existing?.linuxSupport || false,
         analysis: { working_status: { status: 'unknown' } } as any,
         lastUpdated: new Date().toISOString()
       })
