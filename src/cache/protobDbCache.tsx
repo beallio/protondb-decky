@@ -39,9 +39,12 @@ type ProtonDBCache = {
   lastUpdated: string
 }
 
-export async function updateCache(appId: string, newData: ProtonDBCache) {
+export async function updateCache(
+  appId: string,
+  newData: Partial<ProtonDBCache>
+) {
   const oldCache = await localforage.getItem<ProtonDBCache>(appId)
-  const newCache: ProtonDBCache = { ...oldCache, ...newData }
+  const newCache = { ...oldCache, ...newData } as ProtonDBCache
   await localforage.setItem(appId, newCache)
   return newCache
 }
