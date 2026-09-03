@@ -1,6 +1,18 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
+## [1.3.3+beallio.2] - 2026-09-03
+### Fixed
+- More non-Steam shortcuts now receive the correct ProtonDB badge. Shortcut
+  names are normalised and looked up through Steam store search, so titles with
+  punctuation, an "Edition" suffix or a leading article match.
+- Demo and DLC store entries are rejected, so a demo's rating is never shown for
+  the full game.
+- Library status icons no longer carry over to another game when Steam reuses a
+  grid tile. Each icon is tied to the game it was drawn for.
+- Game pages no longer briefly show a "pending" rating before the real one
+  loads.
+
 ## [1.3.3] - 2026-05-21
 ### Fixed
 - delivery fixes
