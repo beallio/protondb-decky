@@ -1,14 +1,7 @@
-import { fetchNoCors } from '@decky/api'
 import { useEffect, useState } from 'react'
 import { appTypes } from '../constants'
 import { useParams } from './useParams'
-
-function cleanString(str: string) {
-  return str
-    .replace(/['"\u0040\u0026\u2122\u00ae]/g, '')
-    .toLowerCase()
-    .trim()
-}
+import { findSteamAppIdByName } from '../lib/steamSearch'
 
 const useAppId = () => {
   const [appId, setAppId] = useState<string>()
@@ -22,30 +15,7 @@ const useAppId = () => {
         return
       }
 
-      try {
-        const res = await fetchNoCors(
-          `https://steamcommunity.com/actions/SearchApps/${gameName}`,
-          {
-            method: 'GET'
-          }
-        );
-
-        if (res.status === 200) {
-          const options = await res.json() as {
-            appid: string
-            name: string
-          }[]
-          const cleanedGameName = cleanString(gameName)
-          const appId = options.find((o) => {
-            return o.name && cleanString(o.name) === cleanedGameName
-          })?.appid
-          setAppId(appId)
-          return
-        }
-      } catch (error) {
-       console.error(error);
-      }
-      setAppId(undefined)
+      setAppId((await findSteamAppIdByName(gameName)) ?? undefined)
     }
     const appDetails = appStore.GetAppOverviewByGameID(parseInt(pathId))
     const isSteamGame = Boolean(
