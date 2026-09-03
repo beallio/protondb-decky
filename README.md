@@ -23,6 +23,8 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 |---|---|---|
 | **Focus-only library icons** — new setting to show ProtonDB status icons on library covers only while a game is focused, instead of on every tile. | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
 | **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
+| **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
+| **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. See `docs/upstream-issue-stale-badges.md`. | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
