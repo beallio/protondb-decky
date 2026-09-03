@@ -224,7 +224,12 @@ async function cacheUnknown(appId: string) {
   }
 }
 
-function injectDot(bpDoc: Document, coverDiv: Element, status: string) {
+function injectDot(
+  bpDoc: Document,
+  coverDiv: Element,
+  status: string,
+  appId: string
+) {
   try {
     const existing = coverDiv.querySelector(`.${DOT_CLASS}`)
     if (existing) {
@@ -244,6 +249,9 @@ function injectDot(bpDoc: Document, coverDiv: Element, status: string) {
     const wrapper = bpDoc.createElement('div')
     wrapper.className = DOT_CLASS
     wrapper.setAttribute('data-status', status)
+    // Steam reuses grid nodes for other games; the dot is not React's to
+    // remove, so record who it was painted for and let the scans check it.
+    wrapper.setAttribute('data-appid', appId)
     wrapper.style.cssText = `position:absolute;${posStyles[pos] || posStyles.bl}width:20px;height:20px;z-index:9999;pointer-events:none;background:rgba(0,0,0,0.7);border-radius:20px;padding:2px;display:flex;align-items:center;justify-content:center;`
 
     const ns = 'http://www.w3.org/2000/svg'
@@ -305,7 +313,7 @@ async function processBatch(bpDoc: Document) {
         bpDoc
           .querySelector(`img[src*="/customimages/${rawId}"]`)
           ?.closest(COVER_SELECTOR)
-      if (cover) injectDot(bpDoc, cover, status)
+      if (cover) injectDot(bpDoc, cover, status, rawId)
     } catch {
       // skip failed fetch
     }
@@ -352,14 +360,19 @@ async function scanTiles() {
     const needsDiskCheck: Array<{ rawId: string; cover: Element }> = []
 
     for (const cover of covers) {
-      if (cover.querySelector(`.${DOT_CLASS}`)) continue
-
       const rawId = getAppIdFromCover(cover)
       if (!rawId) continue
 
+      const existing = cover.querySelector(`.${DOT_CLASS}`)
+      if (existing) {
+        if (existing.getAttribute('data-appid') === rawId) continue
+        // Inherited from whichever game held this node before.
+        existing.remove()
+      }
+
       const memCached = statusCache.get(rawId)
       if (memCached) {
-        injectDot(bpDoc, cover as Element, memCached)
+        injectDot(bpDoc, cover as Element, memCached, rawId)
         continue
       }
 
@@ -373,7 +386,7 @@ async function scanTiles() {
         const diskCached = await getStatusFromCache(steamId)
         if (diskCached) {
           statusCache.set(rawId, diskCached.status)
-          injectDot(bpDoc, cover, diskCached.status)
+          injectDot(bpDoc, cover, diskCached.status, rawId)
           if (diskCached.stale && !pendingIds.has(rawId)) {
             pendingIds.add(rawId)
           }
@@ -447,15 +460,25 @@ function reinjectCached() {
     for (const cover of covers) {
       const appId = getAppIdFromCover(cover)
       if (!appId) continue
-      const cached = statusCache.get(appId)
-      if (!cached) continue
       const existing = cover.querySelector(`.${DOT_CLASS}`)
+      const inherited =
+        existing !== null && existing.getAttribute('data-appid') !== appId
+      const cached = statusCache.get(appId)
+
+      if (!cached) {
+        // No status for this game, so nothing to draw - but a dot here came
+        // from the game that previously occupied this node.
+        if (inherited) existing?.remove()
+        continue
+      }
+
       if (existing) {
-        const currentColor = STATUS_COLORS[cached] || STATUS_COLORS.unknown
-        if (existing.getAttribute('data-status') === cached) continue
+        if (!inherited && existing.getAttribute('data-status') === cached) {
+          continue
+        }
         existing.remove()
       }
-      injectDot(bpDoc, cover as Element, cached)
+      injectDot(bpDoc, cover as Element, cached, appId)
     }
   } catch {
     // silently fail - don't crash Decky
