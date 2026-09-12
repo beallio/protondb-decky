@@ -1,4 +1,10 @@
 import { fetchNoCors } from '@decky/api'
+import { createModuleMapping } from '@decky/ui'
+import { createElement } from 'react'
+import { createPortal } from 'react-dom'
+import LibraryGridIcon, {
+  libraryGridIconCss
+} from '../components/libraryGridIcon'
 import { SettingsContext } from '../hooks/useSettings'
 import { GATEWAY_BASE_URL, GATEWAY_API_KEY, appTypes } from '../constants'
 import {
@@ -7,33 +13,37 @@ import {
   getAllCachedStatuses
 } from '../cache/protobDbCache'
 import { findSteamAppIdByName } from '../lib/steamSearch'
+import type { GatewayAnalysis } from '../../types/gateway'
 
-declare const appStore: any
+type AppOverview = {
+  app_type?: number
+  display_name?: string
+  appid?: number
+  m_unAppID?: number
+}
+declare const appStore: {
+  GetAppOverviewByGameID(id: number): AppOverview | undefined
+  GetInstalledApps?(): AppOverview[]
+  m_mapApps?: Map<number, unknown>
+}
+declare const SteamUIStore: {
+  WindowStore?: {
+    GamepadUIMainWindowInstance?: { m_BrowserWindow?: { document?: Document } }
+  }
+}
 
 const FETCH_TIMEOUT_MS = 2000
 const BATCH_SIZE = 3
 const BATCH_DELAY_MS = 3000
-const SCAN_INTERVAL_MS = 3000
 const GRID_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const DOT_CLASS = 'protondb-grid-dot'
 const COVER_SELECTOR = '._1pwP4eeP1zQD7PEgmsep0W'
-const FOCUS_ONLY_STYLE_ID = 'protondb-grid-focus-only'
+const FOOTER_SELECTOR = '._3BPFqWN5T-x8njyrRYM1CX'
+const OVERLAY_SELECTOR = '._2GRcKrPZsMSF6glMPRMZei'
+const HOST_CLASS = 'protondb-grid-host'
 const APP_ID_FROM_SRC = /\/(?:assets|customimages)\/(\d+)/
 
-const STATUS_COLORS: Record<string, string> = {
-  working: 'rgb(74, 194, 100)',
-  not_working: 'rgb(200, 30, 30)',
-  unknown: 'rgb(166, 166, 166)'
-}
-
-declare const SteamUIStore: any
-
-const statusCache = new Map<string, string>()
-const resolveCache = new Map<string, string | null>()
-const pendingIds = new Set<string>()
-let isFetching = false
-let scanInterval: ReturnType<typeof setInterval> | null = null
-let lastPosition: string = ''
+type NativeRoot = { render(children: React.ReactNode): void; unmount(): void }
+type NativeRootCreator = (container: HTMLElement) => NativeRoot
 
 function isSteamGame(gameId: number): boolean {
   try {
@@ -47,38 +57,10 @@ function isSteamGame(gameId: number): boolean {
 function isSteamGameStrict(gameId: number): boolean {
   try {
     if (gameId >= 2000000000) return false
-    const overview = appStore?.GetAppOverviewByGameID(gameId)
-    return overview?.app_type === 1
+    return appStore?.GetAppOverviewByGameID(gameId)?.app_type === 1
   } catch {
     return false
   }
-}
-
-async function resolveToSteamAppId(rawId: string): Promise<string | null> {
-  if (resolveCache.has(rawId)) {
-    return resolveCache.get(rawId) ?? null
-  }
-
-  const num = parseInt(rawId)
-  if (!isNaN(num) && isSteamGame(num)) {
-    resolveCache.set(rawId, rawId)
-    return rawId
-  }
-
-  try {
-    const overview = appStore?.GetAppOverviewByGameID(num)
-    const gameName = overview?.display_name
-    if (gameName) {
-      const steamId = await findSteamAppIdByName(gameName)
-      resolveCache.set(rawId, steamId)
-      return steamId
-    }
-  } catch {
-    // silently fail
-  }
-
-  resolveCache.set(rawId, null)
-  return null
 }
 
 function getBigPictureDocument(): Document | null {
@@ -92,44 +74,33 @@ function getBigPictureDocument(): Document | null {
   }
 }
 
-function syncFocusOnlyStyle(
-  bpDoc: Document | null = getBigPictureDocument()
-) {
-  if (!bpDoc) return
-
-  const existing = bpDoc.getElementById(FOCUS_ONLY_STYLE_ID)
-  if (SettingsContext.value.showLibraryIcons !== true) {
-    existing?.remove()
-    for (const dot of bpDoc.querySelectorAll(`.${DOT_CLASS}`)) dot.remove()
-    return
+function getAppIdFromCover(cover: Element): string | null {
+  const tile = cover.closest('[data-id]')
+  if (tile) {
+    const id = tile.getAttribute('data-id')
+    const num = parseInt(id || '')
+    if (!isNaN(num) && num > 0) return id
   }
-  if (SettingsContext.value.libraryIconsOnFocusOnly !== true) {
-    existing?.remove()
-    return
+  const img = cover.querySelector('img')
+  if (img?.src) {
+    const match = img.src.match(APP_ID_FROM_SRC)
+    if (match && !isNaN(parseInt(match[1]))) return match[1]
   }
-  if (existing) return
-
-  const style = bpDoc.createElement('style')
-  style.id = FOCUS_ONLY_STYLE_ID
-  style.textContent = `
-${COVER_SELECTOR} .${DOT_CLASS} { opacity: 0; }
-${COVER_SELECTOR}.gpfocuswithin .${DOT_CLASS},
-${COVER_SELECTOR}:focus-within .${DOT_CLASS},
-${COVER_SELECTOR}:hover .${DOT_CLASS} { opacity: 1; }
-`
-  bpDoc.head.appendChild(style)
+  return null
 }
 
-async function fetchWithTimeout(
-  promise: Promise<Response>,
-  ms: number = FETCH_TIMEOUT_MS
-): Promise<Response> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), ms)
-    )
-  ])
+async function fetchWithTimeout(promise: Promise<Response>): Promise<Response> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('timeout')), FETCH_TIMEOUT_MS)
+      })
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function getStatusFromCache(
@@ -152,447 +123,488 @@ async function getStatusFromCache(
   return null
 }
 
-async function hasProtonDBReports(appId: string): Promise<boolean> {
-  try {
-    const res = await fetchWithTimeout(
-      fetchNoCors(
-        `https://www.protondb.com/api/v1/reports/summaries/${appId}.json`
-      )
-    )
-    if (res.status === 200) {
-      const data = await res.json()
-      return !!data?.tier
-    }
-  } catch {
-    // silently fail
+export function initLibraryGridPatch(): () => void {
+  const creators = new Set<NativeRootCreator>()
+  for (const module of createModuleMapping(
+    (m) => typeof m?.createRoot === 'function'
+  ).values()) {
+    creators.add(module.createRoot)
   }
-  return false
-}
+  if (creators.size !== 1) {
+    throw new Error(
+      'Expected one native React createRoot export; found ' + creators.size
+    )
+  }
+  const createRoot = creators.values().next().value as NativeRootCreator
+  const statusCache = new Map<string, string>()
+  const resolveCache = new Map<string, string | null>()
+  const pendingIds = new Set<string>()
+  const checkingIds = new Set<string>()
+  const hosts = new Map<
+    Element,
+    { host: HTMLElement; footer: Element; appId: string; key: number }
+  >()
+  const affected = new Set<Element>()
+  const delays = new Map<ReturnType<typeof setTimeout>, () => void>()
+  let disposed = false
+  let enabled = false
+  let focusOnly = false
+  let position: 'bl' | 'tl' | 'tr' = 'bl'
+  let cacheLoaded = false
+  let isFetching = false
+  let refreshCounter = 0
+  let refreshIntervalSecs = 60
+  let refreshing = false
+  let document: Document | null = null
+  let root: NativeRoot | null = null
+  let style: HTMLStyleElement | null = null
+  let observer: MutationObserver | null = null
+  let renderQueued = false
+  let observerQueued = false
+  let nextKey = 0
+  let startupTimer: ReturnType<typeof setTimeout> | undefined
 
-async function fetchAndCacheStatus(appId: string): Promise<string> {
-  // Check if the game has ProtonDB reports before calling gateway
-  const hasReports = await hasProtonDBReports(appId)
-  if (!hasReports) {
+  function queueRender(): void {
+    if (disposed || !root || renderQueued) return
+    renderQueued = true
+    queueMicrotask(() => {
+      renderQueued = false
+      if (disposed || !root) return
+      root.render(
+        Array.from(hosts.values(), (entry) =>
+          createPortal(
+            createElement(LibraryGridIcon, {
+              appId: entry.appId,
+              status: statusCache.get(entry.appId),
+              position,
+              focusOnly
+            }),
+            entry.host,
+            String(entry.key)
+          )
+        )
+      )
+    })
+  }
+
+  function publishStatus(key: string, status: string): void {
+    if (disposed || statusCache.get(key) === status) return
+    statusCache.set(key, status)
+    queueRender()
+  }
+
+  function reconcile(cover: Element): void {
+    const existing = hosts.get(cover)
+    const appId = getAppIdFromCover(cover)
+    const footer = cover.querySelector(FOOTER_SELECTOR)
+    const overlay = footer?.closest(OVERLAY_SELECTOR)
+    const valid =
+      cover.isConnected &&
+      cover.ownerDocument === document &&
+      appId &&
+      footer &&
+      overlay &&
+      cover.contains(overlay)
+    if (
+      existing &&
+      (!valid ||
+        existing.footer !== footer ||
+        existing.host.parentElement !== footer)
+    ) {
+      existing.host.remove()
+      hosts.delete(cover)
+      queueRender()
+    }
+    if (!valid || !document) return
+    const entry = hosts.get(cover)
+    if (!entry) {
+      const host = document.createElement('div')
+      host.className = HOST_CLASS
+      footer.prepend(host)
+      hosts.set(cover, { host, footer, appId, key: nextKey++ })
+      queueRender()
+      if (cacheLoaded) void loadStatus(appId)
+    } else if (entry.appId !== appId) {
+      entry.appId = appId
+      queueRender()
+      if (cacheLoaded) void loadStatus(appId)
+    }
+  }
+
+  function collect(node: Node): void {
+    if (node.nodeType !== 1) return
+    const element = node as Element
+    // Host insertion/removal must reach the cover, but React's children must not.
+    if (
+      element.closest(`.${HOST_CLASS}`) &&
+      !element.classList.contains(HOST_CLASS)
+    )
+      return
+    const cover = element.closest(COVER_SELECTOR)
+    if (cover) affected.add(cover)
+    for (const child of element.querySelectorAll(COVER_SELECTOR))
+      affected.add(child)
+  }
+
+  function detachDocument(): void {
+    observer?.disconnect()
+    observer = null
+    affected.clear()
+    root?.unmount()
+    root = null
+    for (const entry of hosts.values()) entry.host.remove()
+    hosts.clear()
+    style?.remove()
+    style = null
+    document = null
+  }
+
+  function syncDocument(): void {
+    if (disposed) return
+    const nextDocument = enabled ? getBigPictureDocument() : null
+    if (nextDocument === document) return
+    detachDocument()
+    if (!nextDocument?.body) return
+    document = nextDocument
+    root = createRoot(document.createElement('div'))
+    style = document.createElement('style')
+    style.id = 'protondb-grid-icons-style'
+    style.textContent = libraryGridIconCss
+    document.head.appendChild(style)
+    observer = new MutationObserver((records) => {
+      for (const record of records) {
+        const target = record.target as Element
+        if (target.closest?.(`.${HOST_CLASS}`)) continue
+        collect(target)
+        for (const node of record.addedNodes) collect(node)
+        for (const node of record.removedNodes) collect(node)
+      }
+      if (observerQueued || disposed) return
+      observerQueued = true
+      queueMicrotask(() => {
+        observerQueued = false
+        if (disposed || !document) return
+        for (const [cover, entry] of hosts) {
+          if (
+            !cover.isConnected ||
+            !entry.footer.isConnected ||
+            entry.host.parentElement !== entry.footer ||
+            !cover.contains(entry.footer)
+          )
+            affected.add(cover)
+        }
+        const covers = Array.from(affected)
+        affected.clear()
+        for (const cover of covers) reconcile(cover)
+      })
+    })
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['src', 'data-id']
+    })
+    for (const cover of document.querySelectorAll(COVER_SELECTOR))
+      reconcile(cover)
+  }
+
+  function delay(ms: number): Promise<void> {
+    if (disposed) return Promise.resolve()
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        delays.delete(timer)
+        resolve()
+      }, ms)
+      delays.set(timer, resolve)
+    })
+  }
+
+  async function resolveToSteamAppId(rawId: string): Promise<string | null> {
+    if (disposed || !enabled) return null
+    if (resolveCache.has(rawId)) return resolveCache.get(rawId) ?? null
+    const num = parseInt(rawId)
+    if (!isNaN(num) && isSteamGame(num)) {
+      resolveCache.set(rawId, rawId)
+      return rawId
+    }
+    try {
+      const name = appStore?.GetAppOverviewByGameID(num)?.display_name
+      if (name) {
+        const steamId = await findSteamAppIdByName(name)
+        if (!disposed) resolveCache.set(rawId, steamId)
+        return steamId
+      }
+    } catch {
+      // Name lookup failed.
+    }
+    if (!disposed) resolveCache.set(rawId, null)
+    return null
+  }
+
+  async function cacheUnknown(appId: string): Promise<void> {
+    if (disposed) return
+    try {
+      const existing = await getCache(appId)
+      if (!disposed && !existing?.analysis) {
+        // The existing cache accepts a status-only analysis for titles without reports.
+        const analysis = {
+          working_status: { status: 'unknown' }
+        } as unknown as GatewayAnalysis
+        await updateCache(appId, {
+          analysis,
+          lastUpdated: new Date().toISOString()
+        })
+      }
+    } catch {
+      // localforage write failed
+    }
+  }
+
+  async function fetchAndCacheStatus(appId: string): Promise<string | null> {
+    if (disposed || !enabled || !/^\d+$/.test(appId) || Number(appId) <= 0)
+      return null
+    let hasReports = false
+    try {
+      const res = await fetchWithTimeout(
+        fetchNoCors(
+          `https://www.protondb.com/api/v1/reports/summaries/${appId}.json`
+        )
+      )
+      if (disposed) return null
+      if (res.status === 200) {
+        const data = await res.json()
+        if (disposed) return null
+        hasReports = !!data?.tier
+      }
+    } catch {
+      // Summary unavailable.
+    }
+    if (disposed || !enabled) return null
+    if (!hasReports) {
+      await cacheUnknown(appId)
+      return 'unknown'
+    }
+    try {
+      const url = `${GATEWAY_BASE_URL}/api/v1/analysis/${appId}?user_gpu_vendor=amd&user_proton_version=10`
+      const res = await fetchWithTimeout(
+        fetchNoCors(url, {
+          method: 'GET',
+          headers: { 'X-API-Key': GATEWAY_API_KEY }
+        })
+      )
+      if (disposed) return null
+      if (res.status === 200) {
+        const data = await res.json()
+        if (disposed) return null
+        if (!data || typeof data !== 'object' || !data.working_status) {
+          await cacheUnknown(appId)
+          return 'unknown'
+        }
+        const status = data.working_status.status || 'unknown'
+        // Keep the existing partial-cache contract: no placeholder tier.
+        await updateCache(appId, {
+          analysis: data,
+          lastUpdated: new Date().toISOString()
+        })
+        return status
+      }
+    } catch {
+      // Analysis unavailable.
+    }
+    if (disposed) return null
     await cacheUnknown(appId)
     return 'unknown'
   }
 
-  try {
-    const url = `${GATEWAY_BASE_URL}/api/v1/analysis/${appId}?user_gpu_vendor=amd&user_proton_version=10`
-    const res = await fetchWithTimeout(
-      fetchNoCors(url, {
-        method: 'GET',
-        headers: { 'X-API-Key': GATEWAY_API_KEY }
-      })
+  async function loadStatus(rawId: string): Promise<void> {
+    if (
+      disposed ||
+      !enabled ||
+      !cacheLoaded ||
+      statusCache.has(rawId) ||
+      checkingIds.has(rawId) ||
+      pendingIds.has(rawId)
     )
-    if (res.status === 200) {
-      const data = await res.json()
-      if (!data || typeof data !== 'object' || !data.working_status) {
-        await cacheUnknown(appId)
-        return 'unknown'
-      }
-      const status = data.working_status.status || 'unknown'
-      // Only the analysis was fetched here. Writing a placeholder tier would
-      // leave the game page rendering it before its own fetch lands.
-      await updateCache(appId, {
-        analysis: data,
-        lastUpdated: new Date().toISOString()
-      })
-      return status
-    }
-  } catch {
-    // silently fail
-  }
-  await cacheUnknown(appId)
-  return 'unknown'
-}
-
-async function cacheUnknown(appId: string) {
-  try {
-    const existing = await getCache(appId)
-    if (!existing?.analysis) {
-      await updateCache(appId, {
-        analysis: { working_status: { status: 'unknown' } } as any,
-        lastUpdated: new Date().toISOString()
-      })
-    }
-  } catch {
-    // localforage write failed
-  }
-}
-
-function injectDot(
-  bpDoc: Document,
-  coverDiv: Element,
-  status: string,
-  appId: string
-) {
-  try {
-    const existing = coverDiv.querySelector(`.${DOT_CLASS}`)
-    if (existing) {
-      existing.remove()
-    }
-
-    const container =
-      (coverDiv.firstElementChild as HTMLElement) || (coverDiv as HTMLElement)
-    container.style.position = 'relative'
-    const color = STATUS_COLORS[status] || STATUS_COLORS.unknown
-    const pos = SettingsContext.value.libraryIconPosition || 'bl'
-    const posStyles: Record<string, string> = {
-      bl: 'bottom:4px;left:4px;',
-      tl: 'top:4px;left:4px;',
-      tr: 'top:4px;right:4px;'
-    }
-    const wrapper = bpDoc.createElement('div')
-    wrapper.className = DOT_CLASS
-    wrapper.setAttribute('data-status', status)
-    // Steam reuses grid nodes for other games; the dot is not React's to
-    // remove, so record who it was painted for and let the scans check it.
-    wrapper.setAttribute('data-appid', appId)
-    wrapper.style.cssText = `position:absolute;${posStyles[pos] || posStyles.bl}width:20px;height:20px;z-index:9999;pointer-events:none;background:rgba(0,0,0,0.7);border-radius:20px;padding:2px;display:flex;align-items:center;justify-content:center;`
-
-    const ns = 'http://www.w3.org/2000/svg'
-    const svg = bpDoc.createElementNS(ns, 'svg')
-    svg.setAttribute('viewBox', '0 0 512 512')
-    svg.setAttribute('width', '16')
-    svg.setAttribute('height', '16')
-
-    const circle = bpDoc.createElementNS(ns, 'circle')
-    circle.setAttribute('cx', '256')
-    circle.setAttribute('cy', '256')
-    circle.setAttribute('r', '36')
-    circle.setAttribute('fill', color)
-    svg.appendChild(circle)
-
-    const rotations = ['0', '60', '120']
-    for (const rot of rotations) {
-      const ellipse = bpDoc.createElementNS(ns, 'ellipse')
-      ellipse.setAttribute('cx', '256')
-      ellipse.setAttribute('cy', '256')
-      ellipse.setAttribute('rx', '220')
-      ellipse.setAttribute('ry', '88')
-      ellipse.setAttribute('fill', 'none')
-      ellipse.setAttribute('stroke', color)
-      ellipse.setAttribute('stroke-width', '28')
-      if (rot !== '0') {
-        ellipse.setAttribute('transform', `rotate(${rot} 256 256)`)
-      }
-      svg.appendChild(ellipse)
-    }
-
-    wrapper.appendChild(svg)
-    container.appendChild(wrapper)
-  } catch {
-    // silently fail - don't crash Decky
-  }
-}
-
-async function processBatch(bpDoc: Document) {
-  if (isFetching || pendingIds.size === 0) return
-  isFetching = true
-
-  const batch = Array.from(pendingIds).slice(0, BATCH_SIZE)
-  batch.forEach((id) => pendingIds.delete(id))
-
-  for (const rawId of batch) {
+      return
+    checkingIds.add(rawId)
     try {
-      const steamId = resolveCache.get(rawId) ?? rawId
-      if (!steamId) continue
-
-      const status = await fetchAndCacheStatus(steamId)
-      statusCache.set(rawId, status)
-
-      const cover =
-        bpDoc.querySelector(`[data-id="${rawId}"] ${COVER_SELECTOR}`) ||
-        bpDoc
-          .querySelector(`img[src*="/assets/${rawId}/"]`)
-          ?.closest(COVER_SELECTOR) ||
-        bpDoc
-          .querySelector(`img[src*="/customimages/${rawId}"]`)
-          ?.closest(COVER_SELECTOR)
-      if (cover) injectDot(bpDoc, cover, status, rawId)
-    } catch {
-      // skip failed fetch
+      const steamId = await resolveToSteamAppId(rawId)
+      if (
+        disposed ||
+        !enabled ||
+        !steamId ||
+        !/^\d+$/.test(steamId) ||
+        Number(steamId) <= 0
+      )
+        return
+      const disk = await getStatusFromCache(steamId)
+      if (disposed) return
+      if (disk) publishStatus(rawId, disk.status)
+      if (!disk || disk.stale) pendingIds.add(rawId)
+    } finally {
+      checkingIds.delete(rawId)
+      if (!disposed && enabled) void processBatch()
     }
   }
 
-  isFetching = false
-
-  if (pendingIds.size > 0) {
-    setTimeout(() => processBatch(bpDoc), BATCH_DELAY_MS)
-  }
-}
-
-function getAppIdFromCover(cover: Element): string | null {
-  const tile = cover.closest('[data-id]')
-  if (tile) {
-    const id = tile.getAttribute('data-id')
-    const num = parseInt(id || '')
-    if (!isNaN(num) && num > 0) {
-      return id
-    }
-  }
-
-  const img = cover.querySelector('img')
-  if (img?.src) {
-    const match = img.src.match(APP_ID_FROM_SRC)
-    if (match) {
-      const num = parseInt(match[1])
-      if (!isNaN(num)) return match[1]
-    }
-  }
-
-  return null
-}
-
-async function scanTiles() {
-  try {
-    if (SettingsContext.value.showLibraryIcons !== true) return
-
-    const bpDoc = getBigPictureDocument()
-    if (!bpDoc) return
-    syncFocusOnlyStyle(bpDoc)
-
-    const covers = bpDoc.querySelectorAll(COVER_SELECTOR)
-    const needsDiskCheck: Array<{ rawId: string; cover: Element }> = []
-
-    for (const cover of covers) {
-      const rawId = getAppIdFromCover(cover)
-      if (!rawId) continue
-
-      const existing = cover.querySelector(`.${DOT_CLASS}`)
-      if (existing) {
-        if (existing.getAttribute('data-appid') === rawId) continue
-        // Inherited from whichever game held this node before.
-        existing.remove()
-      }
-
-      const memCached = statusCache.get(rawId)
-      if (memCached) {
-        injectDot(bpDoc, cover as Element, memCached, rawId)
-        continue
-      }
-
-      needsDiskCheck.push({ rawId, cover: cover as Element })
-    }
-
-    for (const { rawId, cover } of needsDiskCheck) {
-      try {
-        const steamId = await resolveToSteamAppId(rawId)
-        if (!steamId) continue
-        const diskCached = await getStatusFromCache(steamId)
-        if (diskCached) {
-          statusCache.set(rawId, diskCached.status)
-          injectDot(bpDoc, cover, diskCached.status, rawId)
-          if (diskCached.stale && !pendingIds.has(rawId)) {
-            pendingIds.add(rawId)
+  async function processBatch(): Promise<void> {
+    if (disposed || !enabled || isFetching || !pendingIds.size) return
+    isFetching = true
+    try {
+      while (!disposed && enabled && pendingIds.size) {
+        const batch = Array.from(pendingIds).slice(0, BATCH_SIZE)
+        for (const rawId of batch) {
+          if (disposed || !enabled) return
+          try {
+            const steamId = resolveCache.get(rawId)
+            if (!steamId) {
+              pendingIds.delete(rawId)
+              continue
+            }
+            const status = await fetchAndCacheStatus(steamId)
+            if (disposed) return
+            if (status !== null) {
+              publishStatus(rawId, status)
+              pendingIds.delete(rawId)
+            } else if (enabled) {
+              pendingIds.delete(rawId)
+            }
+          } catch {
+            pendingIds.delete(rawId)
           }
-          continue
+        }
+        if (!disposed && enabled && pendingIds.size) await delay(BATCH_DELAY_MS)
+      }
+    } finally {
+      isFetching = false
+    }
+  }
+
+  async function refreshUnknownStatuses(): Promise<void> {
+    if (refreshing) return
+    refreshing = true
+    try {
+      for (const [appId, status] of statusCache) {
+        if (disposed || !enabled) return
+        if (status !== 'unknown') continue
+        const disk = await getStatusFromCache(appId)
+        if (disk && disk.status !== 'unknown') publishStatus(appId, disk.status)
+      }
+      refreshIntervalSecs = 300
+    } finally {
+      refreshing = false
+    }
+  }
+
+  async function prefetchLibrary(): Promise<void> {
+    if (disposed || !enabled) return
+    try {
+      const allApps: number[] = []
+      try {
+        for (const app of appStore?.GetInstalledApps?.() ?? []) {
+          const id = app?.appid ?? app?.m_unAppID
+          if (id && isSteamGameStrict(id)) allApps.push(id)
         }
       } catch {
-        /* ignore disk read failure */
+        // appStore unavailable.
       }
-
-      if (!pendingIds.has(rawId)) {
-        pendingIds.add(rawId)
-      }
-    }
-
-    if (pendingIds.size > 0) {
-      processBatch(bpDoc)
-    }
-  } catch {
-    // silently fail - don't crash Decky
-  }
-}
-
-let reinjectInterval: ReturnType<typeof setInterval> | null = null
-let refreshCounter = 0
-let refreshIntervalSecs = 60
-
-async function refreshUnknownStatuses() {
-  try {
-    const unknowns: string[] = []
-    statusCache.forEach((status, appId) => {
-      if (status === 'unknown') unknowns.push(appId)
-    })
-    if (unknowns.length === 0) {
-      refreshIntervalSecs = 300
-      return
-    }
-    for (const appId of unknowns) {
-      const disk = await getStatusFromCache(appId)
-      if (disk && disk.status !== 'unknown') {
-        statusCache.set(appId, disk.status)
-      }
-    }
-    refreshIntervalSecs = 300
-  } catch {
-    /* ignore */
-  }
-}
-
-function reinjectCached() {
-  try {
-    if (SettingsContext.value.showLibraryIcons !== true) return
-    if (statusCache.size === 0) return
-
-    refreshCounter++
-    if (refreshCounter >= refreshIntervalSecs) {
-      refreshCounter = 0
-      refreshUnknownStatuses()
-    }
-
-    const bpDoc = getBigPictureDocument()
-    if (!bpDoc) return
-
-    const currentPos = SettingsContext.value.libraryIconPosition || 'bl'
-    if (currentPos !== lastPosition) {
-      lastPosition = currentPos
-      const oldDots = bpDoc.querySelectorAll(`.${DOT_CLASS}`)
-      for (const dot of oldDots) dot.remove()
-    }
-
-    const covers = bpDoc.querySelectorAll(COVER_SELECTOR)
-    for (const cover of covers) {
-      const appId = getAppIdFromCover(cover)
-      if (!appId) continue
-      const existing = cover.querySelector(`.${DOT_CLASS}`)
-      const inherited =
-        existing !== null && existing.getAttribute('data-appid') !== appId
-      const cached = statusCache.get(appId)
-
-      if (!cached) {
-        // No status for this game, so nothing to draw - but a dot here came
-        // from the game that previously occupied this node.
-        if (inherited) existing?.remove()
-        continue
-      }
-
-      if (existing) {
-        if (!inherited && existing.getAttribute('data-status') === cached) {
-          continue
-        }
-        existing.remove()
-      }
-      injectDot(bpDoc, cover as Element, cached, appId)
-    }
-  } catch {
-    // silently fail - don't crash Decky
-  }
-}
-
-let prefetchAborted = false
-
-async function prefetchLibrary() {
-  try {
-    if (!SettingsContext.value.showLibraryIcons) return
-
-    const allApps: number[] = []
-    try {
-      const overview = appStore?.GetInstalledApps?.() ?? []
-      for (const app of overview) {
-        const id = app?.appid ?? app?.m_unAppID
-        if (id && isSteamGameStrict(id)) allApps.push(id)
-      }
-    } catch {
-      /* appStore not available */
-    }
-
-    if (allApps.length === 0) {
-      try {
-        const sections = appStore?.m_mapApps
-        if (sections?.forEach) {
-          sections.forEach((_val: unknown, key: number) => {
+      if (!allApps.length) {
+        try {
+          appStore?.m_mapApps?.forEach((_value: unknown, key: number) => {
             if (isSteamGameStrict(key)) allApps.push(key)
           })
-        }
-      } catch {
-        /* fallback failed */
-      }
-    }
-
-    if (allApps.length === 0) return
-
-    const uncached: string[] = []
-    for (const id of allApps) {
-      const key = String(id)
-      const memStatus = statusCache.get(key)
-      if (memStatus && memStatus !== 'unknown') continue
-      const disk = await getStatusFromCache(key)
-      if (disk && !disk.stale && disk.status !== 'unknown') {
-        statusCache.set(key, disk.status)
-        continue
-      }
-      uncached.push(key)
-    }
-
-    console.log(
-      `[ProtonDB Grid] Prefetch: ${allApps.length} games, ${uncached.length} need fetching`
-    )
-
-    for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
-      if (prefetchAborted) return
-      const batch = uncached.slice(i, i + BATCH_SIZE)
-      for (const appId of batch) {
-        if (prefetchAborted) return
-        try {
-          const status = await fetchAndCacheStatus(appId)
-          statusCache.set(appId, status)
         } catch {
-          /* skip */
+          // Fallback unavailable.
         }
       }
-      if (i + BATCH_SIZE < uncached.length) {
-        await new Promise((r) => setTimeout(r, BATCH_DELAY_MS))
+      const uncached: string[] = []
+      for (const id of allApps) {
+        if (disposed || !enabled) return
+        const key = String(id)
+        const mem = statusCache.get(key)
+        if (mem && mem !== 'unknown') continue
+        const disk = await getStatusFromCache(key)
+        if (disposed || !enabled) return
+        if (disk && !disk.stale && disk.status !== 'unknown')
+          publishStatus(key, disk.status)
+        else uncached.push(key)
       }
+      for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+        for (const appId of uncached.slice(i, i + BATCH_SIZE)) {
+          if (disposed || !enabled) return
+          const status = await fetchAndCacheStatus(appId)
+          if (status !== null) publishStatus(appId, status)
+        }
+        if (!disposed && enabled && i + BATCH_SIZE < uncached.length)
+          await delay(BATCH_DELAY_MS)
+      }
+    } catch {
+      // Prefetch must not affect the other plugin features.
     }
-
-    console.log('[ProtonDB Grid] Prefetch complete')
-  } catch {
-    /* don't crash Decky */
   }
-}
 
-export function initLibraryGridPatch(): () => void {
-  console.log('[ProtonDB Grid] Initializing library grid patch')
-
-  const settingsSubscription = SettingsContext.subscribe(() =>
-    syncFocusOnlyStyle()
-  )
-
-  reinjectInterval = setInterval(reinjectCached, 1000)
-
-  prefetchAborted = false
-
+  const subscription = SettingsContext.subscribe((settings) => {
+    const nextEnabled = settings.showLibraryIcons === true
+    const nextFocusOnly = settings.libraryIconsOnFocusOnly === true
+    const nextPosition =
+      settings.libraryIconPosition === 'tl' ||
+      settings.libraryIconPosition === 'tr'
+        ? settings.libraryIconPosition
+        : 'bl'
+    const changed =
+      nextEnabled !== enabled ||
+      nextFocusOnly !== focusOnly ||
+      nextPosition !== position
+    if (!changed || disposed) return
+    const enabling = nextEnabled && !enabled
+    enabled = nextEnabled
+    focusOnly = nextFocusOnly
+    position = nextPosition
+    syncDocument()
+    queueRender()
+    if (enabling && cacheLoaded) {
+      for (const entry of hosts.values()) void loadStatus(entry.appId)
+      void processBatch()
+    }
+  })
+  const maintenance = setInterval(() => {
+    syncDocument()
+    if (disposed || !enabled || !statusCache.size) return
+    if (++refreshCounter >= refreshIntervalSecs) {
+      refreshCounter = 0
+      void refreshUnknownStatuses()
+    }
+  }, 1000)
   getAllCachedStatuses()
-    .then((cached) => {
-      cached.forEach((status, appId) => statusCache.set(appId, status))
-      console.log(
-        `[ProtonDB Grid] Pre-loaded ${cached.size} statuses from cache`
-      )
-      reinjectCached()
-    })
+    .then((cached) =>
+      cached.forEach((status, appId) => publishStatus(appId, status))
+    )
     .catch(() => {})
     .finally(() => {
-      scanInterval = setInterval(scanTiles, SCAN_INTERVAL_MS)
-      setTimeout(scanTiles, 500)
-      setTimeout(prefetchLibrary, 5000)
+      if (disposed) return
+      cacheLoaded = true
+      for (const entry of hosts.values()) void loadStatus(entry.appId)
+      startupTimer = setTimeout(() => {
+        startupTimer = undefined
+        void prefetchLibrary()
+      }, 5000)
     })
 
   return () => {
-    settingsSubscription.unsubscribe()
-    const bpDoc = getBigPictureDocument()
-    bpDoc?.getElementById(FOCUS_ONLY_STYLE_ID)?.remove()
-    for (const dot of bpDoc?.querySelectorAll(`.${DOT_CLASS}`) ?? []) dot.remove()
-    if (scanInterval) {
-      clearInterval(scanInterval)
-      scanInterval = null
+    if (disposed) return
+    disposed = true
+    subscription.unsubscribe()
+    clearInterval(maintenance)
+    clearTimeout(startupTimer)
+    for (const [timer, resolve] of delays) {
+      clearTimeout(timer)
+      resolve()
     }
-    if (reinjectInterval) {
-      clearInterval(reinjectInterval)
-      reinjectInterval = null
-    }
-    prefetchAborted = true
+    delays.clear()
+    detachDocument()
+    statusCache.clear()
+    resolveCache.clear()
+    pendingIds.clear()
+    checkingIds.clear()
   }
 }
