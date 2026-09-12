@@ -25,6 +25,7 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 | **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
 | **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
 | **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. See `docs/upstream-issue-stale-badges.md`. | — | Not submitted |
+| **Delisted non-Steam games** — if Steam finds no matching game, a second search uses the SteamDB index behind ProtonDB's search page. This can find titles such as *TRANSFORMERS: Devastation*. | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
@@ -34,6 +35,16 @@ own patch set at the next rebase onto upstream.
 Download `protondb-decky.zip` from the [releases page](https://github.com/beallio/protondb-decky/releases),
 then install it through Decky Loader's **Settings → Developer → Install Plugin from ZIP**.
 Uninstall the store version first — both use the same plugin name.
+
+### Matching non-Steam games
+
+The plugin searches Steam using the shortcut's name. If Steam responds but has no
+matching game, the plugin searches game titles in SteamDB's index through Algolia,
+the service used by ProtonDB's search page. This can find some games removed from
+sale on Steam. Both searches check the title before accepting a result.
+
+The fallback is automatic and needs no setup. It does not run when the Steam
+request fails. Games missing from both search results will still have no badge.
 
 ---
 
