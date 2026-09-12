@@ -1,6 +1,14 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
+## [Unreleased]
+### Fixed
+- Non-Steam shortcuts can now match some delisted games, including
+  *TRANSFORMERS: Devastation*. When Steam returns no acceptable match, the plugin
+  searches ProtonDB's SteamDB title index through Algolia.
+- The fallback keeps strict title and demo/DLC checks. Failed Steam requests do
+  not trigger it, and failed fallback requests leave the game unmatched.
+
 ## [1.3.3+beallio.2] - 2026-09-03
 ### Fixed
 - More non-Steam shortcuts now receive the correct ProtonDB badge. Shortcut
