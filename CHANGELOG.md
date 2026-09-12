@@ -1,7 +1,7 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
-## [Unreleased]
+## [1.3.3+beallio.3] - 2026-09-11
 ### Fixed
 - Non-Steam shortcuts can now match some delisted games, including
   *TRANSFORMERS: Devastation*. When Steam returns no acceptable match, the plugin
