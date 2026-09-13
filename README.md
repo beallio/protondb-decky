@@ -26,6 +26,7 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 | **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
 | **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. See `docs/upstream-issue-stale-badges.md`. | — | Not submitted |
 | **Delisted non-Steam games** — if Steam finds no matching game, a second search uses the SteamDB index behind ProtonDB's search page. This can find titles such as *TRANSFORMERS: Devastation*. | — | Not submitted |
+| **Home and Library icon update (unreleased)** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
@@ -114,13 +115,19 @@ The analysis button (bar chart icon) next to the ProtonDB badge opens a detailed
 
 ### Library Status Icons
 
-Small status icons appear on game covers in the library grid:
+Small status icons appear on game covers in Home's recent-games row and the Library grid:
 
 - **Green atom** — Game should work on Linux
 - **Red atom** — Game is borked or not working
 - **Gray atom** — Unknown or insufficient data
 
-These icons are populated in the background after plugin startup. Games you haven't browsed yet may take a few minutes to appear as data is fetched in batches to avoid API overload.
+Use the plugin settings to show icons on all covers or only on the focused or hovered game. You can place them at the bottom left, top left, or top right. The icons do not change how you select or open a game.
+
+Icons appear when compatibility data is available. Games without cached data may take a few minutes while the plugin fetches data in the background.
+
+**Unreleased update on `fork-main`:** Bottom-left icons sit alongside Steam's own cover icons, and focus-only icons use Steam's fade-in. Cached icons appear on cards already on screen when the plugin is enabled or reloaded. Turning cover icons off removes them immediately. Existing visibility and position settings still apply.
+
+This update changes icon appearance and behavior. Testing did not show a clear scrolling speed improvement. It is not yet included in a published fork ZIP.
 
 ### Settings Tips
 
