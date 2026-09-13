@@ -24,9 +24,9 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 | **Focus-only library icons** — new setting to show ProtonDB status icons on library covers only while a game is focused, instead of on every tile. | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
 | **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
 | **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
-| **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. See `docs/upstream-issue-stale-badges.md`. | — | Not submitted |
-| **Delisted non-Steam games** — if Steam finds no matching game, a second search uses the SteamDB index behind ProtonDB's search page. This can find titles such as *TRANSFORMERS: Devastation*. | — | Not submitted |
-| **Home and Library icon update (unreleased)** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | — | Not submitted |
+| **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. | — | Not submitted |
+| **ProtonDB fallback lookup** — when Steam returns no matching game, search the SteamDB title index used by ProtonDB. This can find some delisted non-Steam games, such as *TRANSFORMERS: Devastation*. | — | Not submitted |
+| **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
@@ -36,16 +36,6 @@ own patch set at the next rebase onto upstream.
 Download `protondb-decky.zip` from the [releases page](https://github.com/beallio/protondb-decky/releases),
 then install it through Decky Loader's **Settings → Developer → Install Plugin from ZIP**.
 Uninstall the store version first — both use the same plugin name.
-
-### Matching non-Steam games
-
-The plugin searches Steam using the shortcut's name. If Steam responds but has no
-matching game, the plugin searches game titles in SteamDB's index through Algolia,
-the service used by ProtonDB's search page. This can find some games removed from
-sale on Steam. Both searches check the title before accepting a result.
-
-The fallback is automatic and needs no setup. It does not run when the Steam
-request fails. Games missing from both search results will still have no badge.
 
 ---
 
@@ -66,20 +56,8 @@ request fails. Games missing from both search results will still have no badge.
 
 ProtonDB Badges retrieves ProtonDB ratings via the ProtonDB API and overlays them as a tappable badge on each game's library page. Tapping the badge opens the corresponding ProtonDB page.
 
-This plugin is an actively maintained extension of the original *protondb-decky* plugin and adds a **Submit** button, allowing users to submit ProtonDB reports **directly from Game Mode**, from their library, without opening a browser.  
+The **Submit** button lets you submit ProtonDB reports directly from Game Mode, without opening a separate browser.
 The submit button can be enabled or disabled in the plugin settings.
-
----
-
-## ✨ Why this plugin exists
-
-The original protondb-decky plugin is no longer maintained and has been archived. Additionally, submitting ProtonDB reports required several manual steps outside Game Mode.
-
-This plugin was created to:
-- Keep ProtonDB badges available on Steam Deck/Steam Client Picture Big mode.
-- Simplify report submission.
-- Allow submission to be done directly from the game page in Game Mode.
-- Show badge on Steam Store page. (only on Steam Deck)
 
 ---
 
@@ -125,10 +103,6 @@ Use the plugin settings to show icons on all covers or only on the focused or ho
 
 Icons appear when compatibility data is available. Games without cached data may take a few minutes while the plugin fetches data in the background.
 
-**Unreleased update on `fork-main`:** Bottom-left icons sit alongside Steam's own cover icons, and focus-only icons use Steam's fade-in. Cached icons appear on cards already on screen when the plugin is enabled or reloaded. Turning cover icons off removes them immediately. Existing visibility and position settings still apply.
-
-This update changes icon appearance and behavior. Testing did not show a clear scrolling speed improvement. It is not yet included in a published fork ZIP.
-
 ### Settings Tips
 
 The Settings tab shows environment variables that other users have successfully used when running the game. Only options from positive reports (Platinum/Gold/Silver) are included, and each option must appear in at least 2 reports.
@@ -149,45 +123,7 @@ This is a limitation of the protondb website, and this is only a one-time action
 **Steam Store page ProtonDB badges**  
 - Currently the badges are visible as an overlay, which doesn't look the same as the badges on the library.
 - It's currently not possible to click on the badge using an external controller.
-- Protondb badges are not available in store pages on Linux/Bazitte, and will currently only work on Steam Deck. (I need to check the possibities to make it available on Bazitte too)
-
----
-
-## 🌍 Translations
-
-Some translations were added or updated using AI, as I don't know yet how Crowdine works.'   This is only temporary.
-If you spot an incorrect or awkward translation, pull requests are welcome.
-
----
-
-## 🧪 Compatibility & Testing
-
-Tested on:
-- **SteamOS 3.9** — Steam Deck LCD - Decky Loader v3.2.1 — SteamClient023
-- **Ubuntu 25.10** — Steam Big Picture Mode - Decky Loader v3.2.1 — SteamClient023
-- **Bazzite 43 (NVIDIA)** - Steam Big Picture Mode - Decky Loader v3.2.1 — SteamClient023
-
-Steam Deck OLED has not been tested yet, because I don't own a Steam Deck OLED. Feel free to send me one.
-
----
-
-## 💖 Sponsoring
-
-If you find this plugin useful and want to support its continued development, you can sponsor me.
-
-Your support helps with:
-- Maintenance and bug fixes  
-- New features and improvements  
-- Ability to develop new plugins  
-
-### ❤️ Support the project
-
-- 🐙 **GitHub Sponsors**  
-  https://github.com/sponsors/bschelst
-- ☕ **Ko-fi**  
-  https://ko-fi.com/bschelst
-- ☕ **Buy Me a Coffee**  
-  https://www.buymeacoffee.com/bschelst
+- The Steam Store overlay is supported on Steam Deck only, not on other Linux PCs.
 
 ---
 
@@ -204,20 +140,20 @@ https://github.com/SteamDeckHomebrew/decky-loader
 
 ## 📦 Installation (Decky Loader)
 
-Use Decky Store, search for ProtonDB badges or use manual instructions below:
+To install this fork, use its release ZIP. The Decky Store version does not include this fork's changes.
 
 1. Download the **latest `.zip` release**:
-   https://github.com/bschelst/protondb-decky/releases
+   https://github.com/beallio/protondb-decky/releases
 
 2. Open **Game Mode** and launch **Decky Loader**.
 
 3. Enable developer mode in Decky Loader if not enabled yet.
 
-4. Go to **Decky Settings → Plugins → Install from ZIP**.
+4. Go to **Decky Settings → Developer → Install Plugin from ZIP**.
 
-5. Select the downloaded `protondb-decky-<version>.zip`.
+5. Select the downloaded `protondb-decky.zip`.
 
-6. Restart steam client.
+6. Restart Steam if the plugin does not appear.
 
 The badges will appear automatically on supported games in your library.
 
