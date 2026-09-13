@@ -1,6 +1,17 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
+## [Unreleased]
+### Changed
+- Home and Library cover icons now use React-managed rendering. Bottom-left icons
+  align with Steam's own cover icons, and focus-only icons use Steam's fade-in.
+- Icons attach to cards already on screen when enabled or reloaded, and are
+  removed immediately when disabled or when the plugin is unloaded.
+- Card changes now drive icon updates instead of periodic grid scans. Testing
+  did not establish a scrolling speed improvement.
+- Existing icon visibility and position settings are unchanged. Game-page
+  badges, Store badges, and non-Steam title matching are unchanged.
+
 ## [1.3.3+beallio.3] - 2026-09-11
 ### Fixed
 - Non-Steam shortcuts can now match some delisted games, including
