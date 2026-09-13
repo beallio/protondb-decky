@@ -24,9 +24,9 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 | **Focus-only library icons** — new setting to show ProtonDB status icons on library covers only while a game is focused, instead of on every tile. | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
 | **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
 | **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
-| **Stale library badges** — status icons are tied to the app they were drawn for, so an icon left behind on a recycled grid tile is removed instead of inherited by another game; the grid no longer writes a placeholder `pending` tier that the game page then displays. | — | Not submitted |
+| **Game-page rating fix** — game pages no longer show a temporary `pending` rating from cover-icon lookups. | — | Not submitted |
 | **ProtonDB fallback lookup** — when Steam returns no matching game, search the SteamDB title index used by ProtonDB. This can find some delisted non-Steam games, such as *TRANSFORMERS: Devastation*. | — | Not submitted |
-| **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | — | Not submitted |
+| **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, stay correct when Steam reuses a game cover, and update without leaving the page when enabled or disabled. | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
@@ -124,6 +124,14 @@ This is a limitation of the protondb website, and this is only a one-time action
 - Currently the badges are visible as an overlay, which doesn't look the same as the badges on the library.
 - It's currently not possible to click on the badge using an external controller.
 - The Steam Store overlay is supported on Steam Deck only, not on other Linux PCs.
+
+---
+
+## Compatibility & Testing
+
+Tested on:
+- **Steam Deck** — Stable release.
+- **Lenovo Legion Go S** — Stable release.
 
 ---
 
