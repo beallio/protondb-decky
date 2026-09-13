@@ -1,7 +1,7 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
-## [Unreleased]
+## [1.3.3+beallio.3] - 2026-09-12
 ### Changed
 - Home and Library cover icons now use React-managed rendering. Bottom-left icons
   align with Steam's own cover icons, and focus-only icons use Steam's fade-in.
@@ -9,16 +9,16 @@ All important changes to the ProtonDB Badges plugin are documented here.
   removed immediately when disabled or when the plugin is unloaded.
 - Card changes now drive icon updates instead of periodic grid scans. Testing
   did not establish a scrolling speed improvement.
-- Existing icon visibility and position settings are unchanged. Game-page
-  badges, Store badges, and non-Steam title matching are unchanged.
+- Existing icon visibility and position settings are unchanged. Game-page and
+  Store badge rendering are unchanged.
 
-## [1.3.3+beallio.3] - 2026-09-11
 ### Fixed
 - Non-Steam shortcuts can now match some delisted games, including
   *TRANSFORMERS: Devastation*. When Steam returns no acceptable match, the plugin
   searches ProtonDB's SteamDB title index through Algolia.
 - The fallback keeps strict title and demo/DLC checks. Failed Steam requests do
   not trigger it, and failed fallback requests leave the game unmatched.
+- Release archives now include the settings module required by the plugin backend.
 
 ## [1.3.3+beallio.2] - 2026-09-03
 ### Fixed
