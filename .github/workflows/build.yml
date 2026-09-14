@@ -33,6 +33,7 @@ jobs:
                   mkdir -p ./release/dist
                   cp LICENSE ./release/
                   cp main.py ./release/
+                  cp settings.py ./release/
                   cp package.json ./release/
                   cp plugin.json ./release/
                   cp ./dist/index.js ./release/dist/
