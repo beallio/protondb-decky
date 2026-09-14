@@ -114,7 +114,7 @@ If you spot an incorrect or awkward translation, pull requests are welcome.
 ## 🧪 Compatibility & Testing
 
 Tested on:
-- **SteamOS 3.9** — Steam Deck LCD - Decky Loader v3.2.1 — SteamClient023
+- **SteamOS 3.9** — Steam Deck LCD - Steam Machine - Decky Loader v3.2.1 — SteamClient023
 - **Ubuntu 25.10** — Steam Big Picture Mode - Decky Loader v3.2.1 — SteamClient023
 - **Bazzite 43 (NVIDIA)** - Steam Big Picture Mode - Decky Loader v3.2.1 — SteamClient023
 
