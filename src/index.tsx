@@ -9,6 +9,7 @@ import patchLibraryApp from './lib/patchLibraryApp'
 import { initStorePatch } from './patches/StorePatch'
 import { initLibraryGridPatch } from './patches/LibraryGridPatch'
 import { loadSettings } from './hooks/useSettings'
+import { reportLifetime } from './actions/protonReports'
 
 export default definePlugin(() => {
   let libraryPatch: ReturnType<typeof patchLibraryApp> | null = null
@@ -50,6 +51,7 @@ export default definePlugin(() => {
     icon: <FaReact />,
     content: <Settings />,
     onDismount() {
+      reportLifetime.abort()
       try {
         if (libraryPatch)
           routerHook.removePatch('/library/app/:appid', libraryPatch)

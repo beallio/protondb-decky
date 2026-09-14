@@ -1,10 +1,11 @@
 import localforage from 'localforage'
 import ProtonDBTier from '../../types/ProtonDBTier'
+import { GatewayAnalysis, ProtonVersionsResponse } from '../../types/gateway'
 import {
-  GatewayAnalysis,
-  RecentReportsResponse,
-  ProtonVersionsResponse
-} from '../../types/gateway'
+  ReportDataset,
+  ReportDevice,
+  ReportPage
+} from '../../types/protonReports'
 
 const STORAGE_KEY = 'protondb-badges-cache'
 const REPORTS_STORAGE_KEY = 'protondb-reports-cache'
@@ -28,7 +29,7 @@ type CachedVersions = {
 }
 
 type CachedReports = {
-  data: RecentReportsResponse
+  data: ReportPage
   lastUpdated: string
 }
 
@@ -52,11 +53,11 @@ export async function updateCache(
 export function clearCache(appId?: string) {
   if (appId?.length) {
     localforage.removeItem(appId)
-    reportsStore.removeItem(appId)
+    void clearReportsCache(appId)
     versionsStore.removeItem(appId)
   } else {
     localforage.clear()
-    reportsStore.clear()
+    void clearReportsCache()
     versionsStore.clear()
   }
 }
@@ -79,39 +80,105 @@ export async function getAllCachedStatuses(): Promise<Map<string, string>> {
 
 const REPORTS_MAX_AGE_MS = 60 * 60 * 1000
 
+function reportCacheKey(
+  appId: string,
+  device: ReportDevice,
+  dataset: ReportDataset,
+  page: number
+): string {
+  return `v2:${appId}:${device}:${dataset.reports}:${dataset.timestamp}:${page}`
+}
+
 export async function getCachedReports(
-  appId: string
-): Promise<RecentReportsResponse | null> {
+  appId: string,
+  device: ReportDevice,
+  dataset: ReportDataset,
+  page: number
+): Promise<ReportPage | null> {
   try {
-    const cached = await reportsStore.getItem<CachedReports>(appId)
-    if (!cached?.data?.reports) return null
+    const cached = await reportsStore.getItem<CachedReports>(
+      reportCacheKey(appId, device, dataset, page)
+    )
+    if (!cached) return null
     const age = Date.now() - new Date(cached.lastUpdated).getTime()
-    if (age > REPORTS_MAX_AGE_MS) return null
-    return cached.data
+    const data = cached.data
+    if (
+      !Number.isFinite(age) ||
+      age < 0 ||
+      age >= REPORTS_MAX_AGE_MS ||
+      data?.appId !== appId ||
+      data.device !== device ||
+      data.dataset?.reports !== dataset.reports ||
+      data.dataset?.timestamp !== dataset.timestamp ||
+      data.page !== page ||
+      !Number.isSafeInteger(data.perPage) ||
+      data.perPage <= 0 ||
+      !Number.isSafeInteger(data.total) ||
+      data.total < 0 ||
+      !Array.isArray(data.reports) ||
+      page > Math.max(1, Math.ceil(data.total / data.perPage)) ||
+      data.reports.length !==
+        Math.min(data.perPage, data.total - (page - 1) * data.perPage) ||
+      !data.reports.every(
+        (report) =>
+          report &&
+          typeof report.id === 'string' &&
+          report.id.length > 0 &&
+          Number.isSafeInteger(report.timestamp) &&
+          report.timestamp > 0 &&
+          (report.outcome === 'working' ||
+            report.outcome === 'issues' ||
+            report.outcome === 'unknown') &&
+          typeof report.isSteamDeck === 'boolean' &&
+          (device !== 'steam-deck' || report.isSteamDeck) &&
+          (report.notes === undefined || typeof report.notes === 'string') &&
+          (report.protonVersion === undefined ||
+            typeof report.protonVersion === 'string') &&
+          (report.os === undefined || typeof report.os === 'string')
+      )
+    )
+      return null
+    return data
   } catch {
     return null
   }
 }
 
 export async function setCachedReports(
-  appId: string,
-  data: RecentReportsResponse
+  data: ReportPage,
+  isCurrent: () => boolean
 ): Promise<void> {
   try {
-    await reportsStore.setItem<CachedReports>(appId, {
-      data,
-      lastUpdated: new Date().toISOString()
-    })
+    if (!isCurrent()) return
+    await reportsStore.removeItem(data.appId)
+    if (!isCurrent()) return
+    await reportsStore.setItem<CachedReports>(
+      reportCacheKey(data.appId, data.device, data.dataset, data.page),
+      {
+        data,
+        lastUpdated: new Date().toISOString()
+      }
+    )
   } catch {
     /* storage full or unavailable — non-critical */
   }
 }
 
-export function clearReportsCache(): void {
+export async function clearReportsCache(appId?: string): Promise<void> {
   try {
-    reportsStore.clear()
+    if (appId) {
+      const prefix = `v2:${appId}:`
+      const keys = await reportsStore.keys()
+      await Promise.all(
+        keys
+          .filter((key) => key === appId || key.startsWith(prefix))
+          .map((key) => reportsStore.removeItem(key))
+      )
+    } else {
+      await reportsStore.clear()
+    }
   } catch {
-    /* ignore */
+    /* storage unavailable — non-critical */
   }
 }
 
