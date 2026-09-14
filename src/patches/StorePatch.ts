@@ -66,6 +66,7 @@ interface StoreOverlayPayload {
   tierLabel: string
   tierColor: { bg: string; text: string; border: string }
   trendBorderCss: string
+  infoBtnColor: { bg: string; text: string }
   analysisData: string
   historyData: string
   recentReportsData: string
@@ -109,6 +110,7 @@ function buildOverlayPreambleCode(payload: StoreOverlayPayload): string {
     var protonVersions = versionsData && versionsData.versions ? versionsData.versions : null;
     var settingsTips = ${payload.settingsData};
     var settingsOptions = settingsTips && settingsTips.launch_options ? settingsTips.launch_options : null;
+    var gameAppId = ${payload.appId};
 
     function esc(s) {
       if (!s) return '';
@@ -325,8 +327,10 @@ function buildOverlayAnalysisHelpersCode(appId: string): string {
         html += '<div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px 12px;margin-bottom:6px;border-left:3px solid rgba(255,255,255,0.12);">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">';
         html += '<span style="font-weight:bold;font-size:12px;color:#e0e0e0;font-family:monospace;flex:1;">' + text + '</span>';
-        html += '<span id="pdb-copy-' + idx + '" style="padding:4px 10px;font-size:11px;color:#aaa;cursor:pointer;background:rgba(255,255,255,0.06);border-radius:4px;margin-left:8px;white-space:nowrap;">Copy</span>';
+        html += '<span id="pdb-apply-' + idx + '" style="padding:4px 10px;font-size:11px;color:#7dd3fc;cursor:pointer;background:rgba(255,255,255,0.06);border-radius:4px;margin-left:8px;white-space:nowrap;">Apply</span>';
+        html += '<span id="pdb-copy-' + idx + '" style="padding:4px 10px;font-size:11px;color:#aaa;cursor:pointer;background:rgba(255,255,255,0.06);border-radius:4px;margin-left:4px;white-space:nowrap;">Copy</span>';
         html += '</div>';
+        html += '<div id="pdb-conflict-' + idx + '" style="display:none;margin-top:6px;padding:6px 8px;background:rgba(255,255,255,0.06);border-radius:4px;font-size:10px;"></div>';
         html += '<div style="font-size:10px;color:#666;">' + count + ' report' + (count !== 1 ? 's' : '') + ' (' + pct + '%)</div>';
         html += '</div>';
       });
@@ -348,6 +352,118 @@ function buildOverlayAnalysisHelpersCode(appId: string): string {
         };
       });
     }
+
+    function getSteamApps() {
+      return (window.SteamClient || (typeof SteamClient !== 'undefined' ? SteamClient : null));
+    }
+
+    function applyOptionDirect(optText, btn) {
+      try {
+        var sa = getSteamApps();
+        if (sa && sa.Apps && sa.Apps.SetAppLaunchOptions) {
+          sa.Apps.SetAppLaunchOptions(gameAppId, optText);
+          btn.textContent = 'Applied!';
+          btn.style.color = '#4ade80';
+          setTimeout(function() { btn.textContent = 'Apply'; btn.style.color = '#7dd3fc'; }, 2000);
+        }
+      } catch(e) {}
+    }
+
+    function wireSettingsApplyButtons(options) {
+      if (!options || !Array.isArray(options)) return;
+      var sa = getSteamApps();
+      if (!sa || !sa.Apps || !sa.Apps.SetAppLaunchOptions) return;
+      options.forEach(function(opt, idx) {
+        if (!opt || !opt.option) return;
+        var btn = document.getElementById('pdb-apply-' + idx);
+        if (!btn) return;
+        var optText = String(opt.option) + '=' + String(opt.value || '');
+        btn.onclick = function() {
+          try {
+            var sa2 = getSteamApps();
+            if (!sa2 || !sa2.Apps) { applyOptionDirect(optText, btn); return; }
+            if (!sa2.Apps.RegisterForAppDetails) { applyOptionDirect(optText, btn); return; }
+            var done = false;
+            var reg = sa2.Apps.RegisterForAppDetails(gameAppId, function(details) {
+              if (done) return;
+              done = true;
+              if (reg && reg.unregister) reg.unregister();
+              var current = (details && typeof details.strLaunchOptions === 'string') ? details.strLaunchOptions : '';
+              if (!current.trim()) {
+                applyOptionDirect(optText, btn);
+              } else {
+                showConflictUI(idx, current, optText, btn);
+              }
+            });
+            setTimeout(function() {
+              if (!done) {
+                done = true;
+                if (reg && reg.unregister) reg.unregister();
+                applyOptionDirect(optText, btn);
+              }
+            }, 1500);
+          } catch(e) {
+            applyOptionDirect(optText, btn);
+          }
+        };
+      });
+    }
+
+    function showConflictUI(idx, current, optText, applyBtn) {
+      var container = document.getElementById('pdb-conflict-' + idx);
+      if (!container) return;
+      container.style.display = 'block';
+      var label = document.createElement('div');
+      label.style.cssText = 'color:#facc15;margin-bottom:4px;';
+      label.textContent = 'Game already has launch options:';
+      var preview = document.createElement('div');
+      preview.style.cssText = 'color:#aaa;font-family:monospace;margin-bottom:6px;word-break:break-all;';
+      preview.textContent = current;
+      var actions = document.createElement('div');
+      actions.style.cssText = 'display:flex;gap:6px;';
+      var appendBtn = document.createElement('span');
+      appendBtn.style.cssText = 'padding:3px 8px;font-size:10px;color:#4ade80;cursor:pointer;background:rgba(74,222,128,0.1);border-radius:3px;';
+      appendBtn.textContent = 'Add to existing';
+      var replaceBtn = document.createElement('span');
+      replaceBtn.style.cssText = 'padding:3px 8px;font-size:10px;color:#f87171;cursor:pointer;background:rgba(248,113,113,0.1);border-radius:3px;';
+      replaceBtn.textContent = 'Replace all';
+      var cancelBtn = document.createElement('span');
+      cancelBtn.style.cssText = 'padding:3px 8px;font-size:10px;color:#aaa;cursor:pointer;background:rgba(255,255,255,0.06);border-radius:3px;';
+      cancelBtn.textContent = 'Cancel';
+      actions.appendChild(appendBtn);
+      actions.appendChild(replaceBtn);
+      actions.appendChild(cancelBtn);
+      container.textContent = '';
+      container.appendChild(label);
+      container.appendChild(preview);
+      container.appendChild(actions);
+      appendBtn.onclick = function() {
+        try {
+          var sa = getSteamApps();
+          if (!sa || !sa.Apps || !sa.Apps.SetAppLaunchOptions) return;
+          var merged = current.indexOf(optText) >= 0 ? current : current + ' ' + optText;
+          sa.Apps.SetAppLaunchOptions(gameAppId, merged);
+          container.style.display = 'none';
+          applyBtn.textContent = 'Applied!';
+          applyBtn.style.color = '#4ade80';
+          setTimeout(function() { applyBtn.textContent = 'Apply'; applyBtn.style.color = '#7dd3fc'; }, 2000);
+        } catch(e) {}
+      };
+      replaceBtn.onclick = function() {
+        try {
+          var sa = getSteamApps();
+          if (!sa || !sa.Apps || !sa.Apps.SetAppLaunchOptions) return;
+          sa.Apps.SetAppLaunchOptions(gameAppId, optText);
+          container.style.display = 'none';
+          applyBtn.textContent = 'Applied!';
+          applyBtn.style.color = '#4ade80';
+          setTimeout(function() { applyBtn.textContent = 'Apply'; applyBtn.style.color = '#7dd3fc'; }, 2000);
+        } catch(e) {}
+      };
+      cancelBtn.onclick = function() {
+        container.style.display = 'none';
+      };
+    }
   `
 }
 
@@ -366,7 +482,7 @@ function buildOverlayUiCode(payload: StoreOverlayPayload): string {
     if (analysisData) {
       const infoBtn = document.createElement('div');
       infoBtn.id = 'protondb-store-info-btn';
-      infoBtn.style.cssText = 'background: rgb(166,166,166); padding: 6px 10px; border-radius: 8px; color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center;';
+      infoBtn.style.cssText = 'background: ${payload.infoBtnColor.bg}; padding: 6px 10px; border-radius: 8px; color: ${payload.infoBtnColor.text}; cursor: pointer; display: flex; align-items: center; justify-content: center;';
       infoBtn.innerHTML = '<svg viewBox="0 0 512 512" width="28" height="28" fill="currentColor"><path d="M32 32v432a16 16 0 0 0 16 16h432" stroke="currentColor" stroke-width="32" fill="none" stroke-linecap="round"/><rect x="96" y="224" width="80" height="192" rx="8"/><rect x="224" y="128" width="80" height="288" rx="8"/><rect x="352" y="64" width="80" height="352" rx="8"/></svg>';
       infoBtn.title = 'Show analysis';
       infoBtn.onclick = function(e) {
@@ -448,6 +564,7 @@ function buildOverlayUiCode(payload: StoreOverlayPayload): string {
           }
           panel.innerHTML = buildSettingsHtml(settingsOptions, settingsTips);
           wireSettingsCopyButtons(settingsOptions);
+          wireSettingsApplyButtons(settingsOptions);
         }
         document.getElementById('pdb-tab-details').onclick = function() { switchTab('details'); };
         document.getElementById('pdb-tab-reports').onclick = function() { switchTab('reports'); lazyLoadReports(); };
@@ -541,6 +658,18 @@ async function injectBadgeIntoStore(appId: string) {
   // Get tier colors
   const tierColor = TIER_COLORS[tier] || TIER_COLORS.pending
 
+  // Info button color based on working status (matches library badge)
+  const workingStatus =
+    analysisResult.status === 'fulfilled'
+      ? analysisResult.value?.working_status?.status
+      : undefined
+  const infoBtnColor =
+    workingStatus === 'working'
+      ? { bg: 'rgb(74, 194, 100)', text: '#000000' }
+      : workingStatus === 'not_working'
+        ? { bg: 'rgb(200, 30, 30)', text: '#000000' }
+        : { bg: 'rgb(166, 166, 166)', text: '#000000' }
+
   // Build analysis data for overlay (JSON-safe)
   const analysisData = serializeForScript(
     analysisResult.status === 'fulfilled' ? analysisResult.value : null
@@ -565,6 +694,7 @@ async function injectBadgeIntoStore(appId: string) {
     tierLabel,
     tierColor,
     trendBorderCss,
+    infoBtnColor,
     analysisData,
     historyData,
     recentReportsData,

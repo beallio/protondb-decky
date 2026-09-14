@@ -12,6 +12,15 @@ declare namespace SteamClient {
         actionName: string
       ) => unknown
     ): RegisteredEvent
+    SetAppLaunchOptions(appId: number, launchOptions: string): void
+    RegisterForAppDetails(
+      appId: number,
+      callback: (details: AppDetails) => void
+    ): { unregister: () => void }
+    SpecifyCompatTool(appId: number, toolName: string): void
+  }
+  const Settings: {
+    GetGlobalCompatTools(): CompatTool[]
   }
   const InstallFolder: {
     GetInstallFolders(): Promise<InstallFolder[]>
@@ -134,4 +143,14 @@ type InstallFolder = {
   bIsMounted: boolean
   bIsFixed: boolean
   vecApps: App[]
+}
+
+type AppDetails = {
+  strLaunchOptions: string
+  [key: string]: unknown
+}
+
+type CompatTool = {
+  strToolName: string
+  strDisplayName: string
 }

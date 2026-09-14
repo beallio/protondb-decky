@@ -61,3 +61,4 @@ deliverables/
 # Local release script
 release.sh
 ISSUES.txt
+PUSH_TO_DECKY_PLUGIN.txt
