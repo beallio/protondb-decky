@@ -144,7 +144,7 @@ Your support helps with:
 
 ## 🧩 Requirements
 
-- Steam Deck or Linux PC using Steam Big Picture
+- Steam Deck, Steam Machine or Linux PC using Steam Big Picture
 - Decky Loader installed
 
 
