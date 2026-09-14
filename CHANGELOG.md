@@ -1,7 +1,7 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
-## [Unreleased]
+## [1.3.3+beallio.4] - 2026-09-13
 ### Changed
 - Individual analysis reports now come directly from ProtonDB, with **Steam Deck**
   selected by default and **All systems** available as an alternative.
