@@ -37,6 +37,19 @@ import {
 } from '../../cache/protobDbCache'
 import ReportChart from './ReportChart'
 import useTranslations from '../../hooks/useTranslations'
+import {
+  getCurrentLaunchOptions,
+  setLaunchOptions,
+  buildMergedOptions
+} from '../../utils/steamLaunchOptions'
+import {
+  getInstalledCompatTools,
+  findMatchingTool,
+  applyCompatTool,
+  getCurrentCompatTool,
+  isDowngrade,
+  lastDebugInfo
+} from '../../utils/compatTools'
 
 const CURRENT_PROTON_MAJOR = '10'
 
@@ -228,7 +241,10 @@ function copyToClipboard(text: string): void {
   }
 }
 
-const SettingRow: FC<{ opt: LaunchOptionStat }> = ({ opt }) => {
+const SettingRow: FC<{ opt: LaunchOptionStat; appId: string }> = ({
+  opt,
+  appId
+}) => {
   if (!opt?.option || typeof opt.value !== 'string') return null
   const count = typeof opt.count === 'number' ? opt.count : 0
   const total =
@@ -236,6 +252,41 @@ const SettingRow: FC<{ opt: LaunchOptionStat }> = ({ opt }) => {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   const text = `${opt.option}=${opt.value}`
   const [copied, setCopied] = useState(false)
+  const [applyState, setApplyState] = useState<'idle' | 'conflict' | 'applied'>(
+    'idle'
+  )
+  const [currentOptions, setCurrentOptions] = useState('')
+
+  const handleApply = async () => {
+    try {
+      const numericId = parseInt(appId, 10)
+      if (isNaN(numericId)) return
+      const current = await getCurrentLaunchOptions(numericId)
+      if (!current.trim()) {
+        setLaunchOptions(numericId, text)
+        setApplyState('applied')
+        setTimeout(() => setApplyState('idle'), 2000)
+      } else {
+        setCurrentOptions(current)
+        setApplyState('conflict')
+      }
+    } catch {
+      setApplyState('idle')
+    }
+  }
+
+  const resolveConflict = (mode: 'append' | 'replace') => {
+    try {
+      const numericId = parseInt(appId, 10)
+      if (isNaN(numericId)) return
+      const merged = buildMergedOptions(currentOptions, text, mode)
+      setLaunchOptions(numericId, merged)
+      setApplyState('applied')
+      setTimeout(() => setApplyState('idle'), 2000)
+    } catch {
+      setApplyState('idle')
+    }
+  }
 
   return (
     <div
@@ -270,11 +321,31 @@ const SettingRow: FC<{ opt: LaunchOptionStat }> = ({ opt }) => {
           style={{
             padding: '4px 10px',
             fontSize: '11px',
-            color: copied ? '#4ade80' : '#aaa',
+            color: applyState === 'applied' ? '#4ade80' : '#7dd3fc',
             cursor: 'pointer',
             background: 'rgba(255,255,255,0.06)',
             borderRadius: '4px',
             marginLeft: '8px',
+            whiteSpace: 'nowrap',
+            outline: 'none',
+            border: 'none'
+          }}
+          onClick={handleApply}
+          onActivate={handleApply}
+          //@ts-ignore
+          focusClassName=""
+        >
+          {applyState === 'applied' ? '✓ Applied' : 'Apply'}
+        </Focusable>
+        <Focusable
+          style={{
+            padding: '4px 10px',
+            fontSize: '11px',
+            color: copied ? '#4ade80' : '#aaa',
+            cursor: 'pointer',
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: '4px',
+            marginLeft: '4px',
             whiteSpace: 'nowrap',
             outline: 'none',
             border: 'none'
@@ -295,6 +366,87 @@ const SettingRow: FC<{ opt: LaunchOptionStat }> = ({ opt }) => {
           {copied ? '✓' : 'Copy'}
         </Focusable>
       </div>
+      {applyState === 'conflict' && (
+        <div
+          style={{
+            marginTop: '6px',
+            padding: '6px 8px',
+            background: 'rgba(255,255,255,0.06)',
+            borderRadius: '4px',
+            fontSize: '10px'
+          }}
+        >
+          <div style={{ color: '#facc15', marginBottom: '4px' }}>
+            Game already has launch options:
+          </div>
+          <div
+            style={{
+              color: '#aaa',
+              fontFamily: 'monospace',
+              marginBottom: '6px',
+              wordBreak: 'break-all'
+            }}
+          >
+            {currentOptions}
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <Focusable
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                color: '#4ade80',
+                cursor: 'pointer',
+                background: 'rgba(74,222,128,0.1)',
+                borderRadius: '3px',
+                outline: 'none',
+                border: 'none'
+              }}
+              onClick={() => resolveConflict('append')}
+              onActivate={() => resolveConflict('append')}
+              //@ts-ignore
+              focusClassName=""
+            >
+              Add to existing
+            </Focusable>
+            <Focusable
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                color: '#f87171',
+                cursor: 'pointer',
+                background: 'rgba(248,113,113,0.1)',
+                borderRadius: '3px',
+                outline: 'none',
+                border: 'none'
+              }}
+              onClick={() => resolveConflict('replace')}
+              onActivate={() => resolveConflict('replace')}
+              //@ts-ignore
+              focusClassName=""
+            >
+              Replace all
+            </Focusable>
+            <Focusable
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                color: '#aaa',
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.06)',
+                borderRadius: '3px',
+                outline: 'none',
+                border: 'none'
+              }}
+              onClick={() => setApplyState('idle')}
+              onActivate={() => setApplyState('idle')}
+              //@ts-ignore
+              focusClassName=""
+            >
+              Cancel
+            </Focusable>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: '10px', color: '#666' }}>
         {count} report{count !== 1 ? 's' : ''} ({pct}%)
       </div>
@@ -302,9 +454,17 @@ const SettingRow: FC<{ opt: LaunchOptionStat }> = ({ opt }) => {
   )
 }
 
-const VersionRow: FC<{ stat: GwVersionStat }> = ({ stat }) => {
+const NON_APPLICABLE_VERSIONS = ['other', 'unknown']
+
+const VersionRow: FC<{ stat: GwVersionStat; appId: string }> = ({
+  stat,
+  appId
+}) => {
   if (!stat?.version) return null
   const current = isCurrent(stat.version)
+  const canApply =
+    typeof stat.version === 'string' &&
+    !NON_APPLICABLE_VERSIONS.includes(stat.version.toLowerCase().trim())
   const ratio = Number.isFinite(stat.positive_ratio) ? stat.positive_ratio : 0
   const color = ratioColor(ratio)
   const pct = Math.round(ratio * 100)
@@ -312,6 +472,54 @@ const VersionRow: FC<{ stat: GwVersionStat }> = ({ stat }) => {
   const ts =
     typeof stat.latest_timestamp === 'number' ? stat.latest_timestamp : 0
   const age = ts > 0 ? Math.round((Date.now() / 1000 - ts) / 86400) : -1
+  const [applyState, setApplyState] = useState<
+    'idle' | 'applied' | 'not_found' | 'confirm_downgrade'
+  >('idle')
+  const [pendingTool, setPendingTool] = useState<{
+    toolName: string
+    displayName: string
+  } | null>(null)
+
+  const handleApplyVersion = async () => {
+    try {
+      const numericId = parseInt(appId, 10)
+      if (isNaN(numericId)) return
+      const tools = await getInstalledCompatTools()
+      const match = findMatchingTool(stat.version, tools)
+      if (!match) {
+        setApplyState('not_found')
+        setTimeout(() => setApplyState('idle'), 5000)
+        return
+      }
+      const currentTool = await getCurrentCompatTool(numericId)
+      if (currentTool && isDowngrade(currentTool, match.displayName)) {
+        setPendingTool(match)
+        setApplyState('confirm_downgrade')
+        return
+      }
+      const success = applyCompatTool(numericId, match.toolName)
+      if (success) {
+        setApplyState('applied')
+        setTimeout(() => setApplyState('idle'), 2000)
+      }
+    } catch {
+      setApplyState('idle')
+    }
+  }
+
+  const confirmDowngrade = () => {
+    if (!pendingTool) return
+    const numericId = parseInt(appId, 10)
+    if (isNaN(numericId)) return
+    const success = applyCompatTool(numericId, pendingTool.toolName)
+    if (success) {
+      setApplyState('applied')
+      setTimeout(() => setApplyState('idle'), 2000)
+    } else {
+      setApplyState('idle')
+    }
+    setPendingTool(null)
+  }
 
   return (
     <div
@@ -339,7 +547,8 @@ const VersionRow: FC<{ stat: GwVersionStat }> = ({ stat }) => {
           style={{
             fontWeight: 'bold',
             fontSize: '13px',
-            color: current ? '#7ab3f0' : '#e0e0e0'
+            color: current ? '#7ab3f0' : '#e0e0e0',
+            flex: 1
           }}
         >
           {stat.version}
@@ -356,7 +565,90 @@ const VersionRow: FC<{ stat: GwVersionStat }> = ({ stat }) => {
             </span>
           )}
         </span>
-        <span style={{ color: '#aaa', fontSize: '11px' }}>
+        {canApply && applyState === 'confirm_downgrade' ? (
+          <>
+            <span
+              style={{
+                fontSize: '9px',
+                color: '#facc15',
+                marginLeft: '6px'
+              }}
+            >
+              Older version — may break game
+            </span>
+            <Focusable
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                color: '#f87171',
+                cursor: 'pointer',
+                background: 'rgba(248,113,113,0.15)',
+                borderRadius: '4px',
+                marginLeft: '6px',
+                whiteSpace: 'nowrap',
+                outline: 'none',
+                border: 'none'
+              }}
+              onClick={confirmDowngrade}
+              onActivate={confirmDowngrade}
+              //@ts-ignore
+              focusClassName=""
+            >
+              Downgrade anyway
+            </Focusable>
+            <Focusable
+              style={{
+                padding: '3px 8px',
+                fontSize: '10px',
+                color: '#aaa',
+                cursor: 'pointer',
+                background: 'rgba(255,255,255,0.06)',
+                borderRadius: '4px',
+                marginLeft: '4px',
+                whiteSpace: 'nowrap',
+                outline: 'none',
+                border: 'none'
+              }}
+              onClick={() => setApplyState('idle')}
+              onActivate={() => setApplyState('idle')}
+              //@ts-ignore
+              focusClassName=""
+            >
+              Cancel
+            </Focusable>
+          </>
+        ) : canApply ? (
+          <Focusable
+            style={{
+              padding: '3px 8px',
+              fontSize: '10px',
+              color:
+                applyState === 'applied'
+                  ? '#4ade80'
+                  : applyState === 'not_found'
+                    ? '#f87171'
+                    : '#7dd3fc',
+              cursor: 'pointer',
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: '4px',
+              marginLeft: '6px',
+              whiteSpace: 'nowrap',
+              outline: 'none',
+              border: 'none'
+            }}
+            onClick={handleApplyVersion}
+            onActivate={handleApplyVersion}
+            //@ts-ignore
+            focusClassName=""
+          >
+            {applyState === 'applied'
+              ? '✓ Set'
+              : applyState === 'not_found'
+                ? 'Not installed'
+                : 'Use'}
+          </Focusable>
+        ) : null}
+        <span style={{ color: '#aaa', fontSize: '11px', marginLeft: '6px' }}>
           {stat.total_reports} report{stat.total_reports !== 1 ? 's' : ''}
         </span>
       </div>
@@ -401,6 +693,18 @@ const VersionRow: FC<{ stat: GwVersionStat }> = ({ stat }) => {
       >
         Latest: {age < 0 ? '—' : age === 0 ? 'today' : `${age}d ago`}
       </div>
+      {applyState === 'not_found' && lastDebugInfo && (
+        <div
+          style={{
+            fontSize: '9px',
+            color: '#f87171',
+            marginTop: '2px',
+            wordBreak: 'break-all'
+          }}
+        >
+          Debug: {lastDebugInfo}
+        </div>
+      )}
     </div>
   )
 }
@@ -911,7 +1215,7 @@ export default function AnalysisModal({
                         })
                       }
                     >
-                      <VersionRow stat={stat} />
+                      <VersionRow stat={stat} appId={appId} />
                     </Focusable>
                   ))}
                   {!versionsData.versions.some((s) => isCurrent(s.version)) && (
@@ -1015,7 +1319,7 @@ export default function AnalysisModal({
                         })
                       }
                     >
-                      <SettingRow opt={opt} />
+                      <SettingRow opt={opt} appId={appId} />
                     </Focusable>
                   ))}
                 </Focusable>
