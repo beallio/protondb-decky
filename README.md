@@ -1,17 +1,19 @@
-# ProtonDB Badges 🎮
+# ProtonDB Badges - beallio edit
 
 [![Latest Release](https://img.shields.io/github/v/release/beallio/protondb-decky?label=version)](https://github.com/beallio/protondb-decky/releases)
 [![License](https://img.shields.io/github/license/beallio/protondb-decky)](LICENSE)
 [![Decky Loader](https://img.shields.io/badge/Decky-Loader-blue)](https://github.com/SteamDeckHomebrew/decky-loader)
 
-Display **tappable ProtonDB badges** on your Steam library and Store pages, with a **submit** button to report directly from Game Mode, a **compatibility analysis** modal (working status, report trends, Proton version breakdown, and recommended launch options), and **status icons** on library game covers. Badges and analysis are also available as an overlay on **Steam Store pages**.
+See **ProtonDB compatibility ratings** on your game pages and Steam Store pages. Open **compatibility analysis** to read community reports, compare Proton versions, and find launch options. Individual reports show **Steam Deck** results by default, with **All systems** available as an alternative.
+
+Status icons on Home and Library game covers show whether a game is reported to work. You can also submit a ProtonDB report directly from Game Mode.
 
 > ### 🍴 This is a fork
 >
 > This repository is a fork of [**bschelst/protondb-decky**](https://github.com/bschelst/protondb-decky).
-> It carries changes that are proposed upstream but not yet merged, so that they can
-> be installed before upstream accepts them. For the official plugin, use the upstream
-> repository or the Decky store.
+> It includes fixes and features that are not yet in upstream. Some have been proposed
+> upstream; the table below shows their status. For the official plugin, use the upstream
+> repository or the Decky Store.
 >
 > Releases here are versioned `<upstream version>+beallio.N` — for example
 > `v1.3.3+beallio.1` is the fork's first build on top of upstream v1.3.3.
@@ -19,14 +21,20 @@ Display **tappable ProtonDB badges** on your Steam library and Store pages, with
 
 ### Changes in this fork awaiting upstream integration
 
-| Change | Upstream PR | Status |
-|---|---|---|
-| **Focus-only library icons** — new setting to show ProtonDB status icons on library covers only while a game is focused, instead of on every tile. | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
-| **QAM version display fix** — the About section reads the version from the package metadata, so it no longer shows a stale number. | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
-| **Non-Steam shortcut matching** — shortcut names are normalised (articles, edition/remaster wording, region and version tokens) and looked up through the Steam store search endpoint instead of the community autocomplete, so titles like *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown* get a badge. Demo and DLC entries are rejected. | — | Not submitted |
-| **Game-page rating fix** — game pages no longer show a temporary `pending` rating from cover-icon lookups. | — | Not submitted |
-| **ProtonDB fallback lookup** — when Steam returns no matching game, search the SteamDB title index used by ProtonDB. This can find some delisted non-Steam games, such as *TRANSFORMERS: Devastation*. | — | Not submitted |
-| **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, stay correct when Steam reuses a game cover, and update without leaving the page when enabled or disabled. | — | Not submitted |
+**First fork release** identifies the first published version with each change.
+Later fork releases also include these changes.
+
+| Change | First fork release | Upstream PR | Status |
+|---|---|---|---|
+| **Focus-only library icons** — show cover icons only while a game is focused or hovered, instead of on every cover. | `1.3.3+beallio.1` | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
+| **Version display fix** — the plugin's About section reads the installed version from the package, so it no longer shows an old number. | `1.3.3+beallio.1` | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
+| **Non-Steam shortcut matching** — improved title matching through Steam Store search finds more games, including *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown*. Demo and DLC entries are rejected. | `1.3.3+beallio.2` | — | Not submitted |
+| **Game-page rating fix** — game pages no longer show a temporary `pending` rating from cover-icon lookups. | `1.3.3+beallio.2` | — | Not submitted |
+| **Reused game-cover fix** — an icon no longer carries over to a different game when Steam reuses a cover in the grid. | `1.3.3+beallio.2` | — | Not submitted |
+| **ProtonDB fallback lookup** — when Steam returns no matching game, search the SteamDB title index used by ProtonDB. This can find some delisted non-Steam games, such as *TRANSFORMERS: Devastation*. | `1.3.3+beallio.3` | — | Not submitted |
+| **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | `1.3.3+beallio.3` | — | Not submitted |
+| **Complete installation package** — release archives include the settings file required for the plugin to start. | `1.3.3+beallio.3` | — | Not submitted |
+| **Steam Deck report filter** — individual reports come directly from ProtonDB and default to Steam Deck. Choose All systems or use Show more to read additional reports. | `1.3.3+beallio.4` | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
 own patch set at the next rebase onto upstream.
@@ -35,7 +43,8 @@ own patch set at the next rebase onto upstream.
 
 Download `protondb-decky.zip` from the [releases page](https://github.com/beallio/protondb-decky/releases),
 then install it through Decky Loader's **Settings → Developer → Install Plugin from ZIP**.
-Uninstall the store version first — both use the same plugin name.
+Install the ZIP over your current copy to keep your settings. The fork and the Decky
+Store version use the same plugin name, so only one can be installed at a time.
 
 ---
 
@@ -87,9 +96,22 @@ The analysis button (bar chart icon) next to the ProtonDB badge opens a detailed
 | Tab | Description |
 |-----|-------------|
 | **Details** | Working status, confidence score, trend direction, freshness, and warnings |
-| **Reports** | A five-year report history chart for all systems, followed by individual reports fetched directly from ProtonDB. **Steam Deck** is selected each time analysis opens; choose **All systems** to include other devices. **Show more** reveals additional reports and loads the next page when needed. The selector does not change the chart. |
+| **Reports** | A five-year history chart for all systems and individual reports from ProtonDB. **Steam Deck** is selected by default; choose **All systems** to include other devices |
 | **Versions** | Proton version breakdown — report counts and success rates per version. The current Steam Deck default is highlighted |
 | **Settings** | Launch options extracted from positive community reports. Tap **Copy** to copy an option to clipboard, or press Apply to apply them automatically |
+
+### Reading reports
+
+The **Steam Deck** / **All systems** selector changes only the individual report list.
+It does not change the history chart, Versions tab, or Settings tab.
+
+**Show more** displays five more reports and loads another page when needed.
+Your selection stays when you switch tabs. Reopening the analysis window or changing
+the game resets the selection to **Steam Deck**.
+
+If there are no Steam Deck reports, you can choose **All systems**. The plugin does
+not switch automatically. If loading another page fails, the reports already shown
+stay visible; use **Retry** to try again.
 
 ### Library Status Icons
 
