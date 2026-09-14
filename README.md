@@ -87,7 +87,7 @@ The analysis button (bar chart icon) next to the ProtonDB badge opens a detailed
 | Tab | Description |
 |-----|-------------|
 | **Details** | Working status, confidence score, trend direction, freshness, and warnings |
-| **Reports** | Report history chart (last 5 years) showing good vs bad reports per month, followed by the 20 most recent individual reports |
+| **Reports** | A five-year report history chart for all systems, followed by individual reports fetched directly from ProtonDB. **Steam Deck** is selected each time analysis opens; choose **All systems** to include other devices. **Show more** reveals additional reports and loads the next page when needed. The selector does not change the chart. |
 | **Versions** | Proton version breakdown — report counts and success rates per version. The current Steam Deck default is highlighted |
 | **Settings** | Launch options extracted from positive community reports. Tap **Copy** to copy an option to clipboard, or press Apply to apply them automatically |
 

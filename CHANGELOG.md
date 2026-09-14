@@ -1,6 +1,13 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
+## [Unreleased]
+### Changed
+- Individual analysis reports now come directly from ProtonDB, with **Steam Deck**
+  selected by default and **All systems** available as an alternative.
+- **Show more** can load additional report pages. The history chart still covers
+  all systems and is labeled separately from the report selector.
+
 ## [1.3.3+beallio.3] - 2026-09-12
 ### Changed
 - Home and Library cover icons now use React-managed rendering. Bottom-left icons

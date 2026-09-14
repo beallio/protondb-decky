@@ -1,5 +1,6 @@
 import {
   ConfirmModal,
+  DropdownItem,
   Focusable,
   Navigation,
   ScrollPanelGroup,
@@ -10,35 +11,111 @@ import React, {
   FC,
   ReactNode,
   useEffect,
-  useMemo,
+  useRef,
   useState
 } from 'react'
 import {
   GatewayAnalysis,
   ReportHistory,
-  RecentReport,
-  RecentReportsResponse,
   ProtonVersionsResponse,
   ProtonVersionStat as GwVersionStat,
   SettingsTipsResponse,
   LaunchOptionStat
 } from '../../../types/gateway'
 import {
+  CommunityReport,
+  ReportDataset,
+  ReportDevice,
+  ReportPage,
+  ReportRequest
+} from '../../../types/protonReports'
+import {
   getReportHistory,
-  getRecentReports,
   getProtonVersions,
   getSettingsTips
 } from '../../actions/gateway'
-import {
-  getCachedReports,
-  setCachedReports,
-  getCachedVersions,
-  setCachedVersions
-} from '../../cache/protobDbCache'
+import { getReportPage, reportLifetime } from '../../actions/protonReports'
+import { getCachedVersions, setCachedVersions } from '../../cache/protobDbCache'
 import ReportChart from './ReportChart'
 import useTranslations from '../../hooks/useTranslations'
 
 const CURRENT_PROTON_MAJOR = '10'
+const REPORTS_DISPLAY_INCREMENT = 5
+const REPORT_DEVICE_OPTIONS: ReadonlyArray<{
+  data: number
+  device: ReportDevice
+  label: string
+}> = [
+  { data: 0, device: 'steam-deck', label: 'Steam Deck' },
+  { data: 1, device: 'all-devices', label: 'All systems' }
+]
+const REPORT_DEVICE_DROPDOWN_OPTIONS = REPORT_DEVICE_OPTIONS.map(
+  ({ data, label }) => ({ data, label })
+)
+
+interface ReportsViewState {
+  scope: string
+  loaded: boolean
+  dataset?: ReportDataset
+  page: number
+  perPage: number
+  total: number
+  reports: CommunityReport[]
+  visible: number
+  loadingPage?: number
+  errorPage?: number
+}
+
+interface ActiveReportRequest {
+  token: number
+  scope: string
+  page: number
+  dataset?: ReportDataset
+}
+type AnalysisTab = 'details' | 'chart' | 'reports' | 'versions' | 'settings'
+
+function reportScope(appId: string, device: ReportDevice): string {
+  return `${appId}:${device}`
+}
+
+function emptyReportsView(
+  appId: string,
+  device: ReportDevice
+): ReportsViewState {
+  return {
+    scope: reportScope(appId, device),
+    loaded: false,
+    page: 0,
+    perPage: 0,
+    total: 0,
+    reports: [],
+    visible: REPORTS_DISPLAY_INCREMENT
+  }
+}
+
+function sameDataset(
+  left: ReportDataset | undefined,
+  right: ReportDataset
+): boolean {
+  return (
+    !!left &&
+    left.reports === right.reports &&
+    left.timestamp === right.timestamp
+  )
+}
+
+function appendUniqueReports(
+  current: CommunityReport[],
+  incoming: CommunityReport[]
+): CommunityReport[] {
+  const ids = new Set(current.map((report) => report.id))
+  const appended = incoming.filter((report) => {
+    if (ids.has(report.id)) return false
+    ids.add(report.id)
+    return true
+  })
+  return appended.length > 0 ? [...current, ...appended] : current
+}
 
 interface AnalysisModalProps {
   analysis: GatewayAnalysis
@@ -122,14 +199,17 @@ function formatDate(timestamp: number): string {
   })
 }
 
-function isPositiveRating(rating: string): boolean {
-  return rating === 'Gold' || rating === 'Platinum' || rating === 'Silver'
+const REPORT_OUTCOME_STYLE: Record<
+  CommunityReport['outcome'],
+  { color: string; label: string }
+> = {
+  working: { color: '#4ade80', label: '👍 Works' },
+  issues: { color: '#f87171', label: '👎 Issues' },
+  unknown: { color: '#aaa', label: 'Unknown' }
 }
 
-const ReportCard: FC<{ report: RecentReport }> = ({ report }) => {
-  const positive = isPositiveRating(report.rating)
-  const color = positive ? '#4ade80' : '#f87171'
-  const label = positive ? '👍 Works' : '👎 Issues'
+const ReportCard: FC<{ report: CommunityReport }> = ({ report }) => {
+  const outcome = REPORT_OUTCOME_STYLE[report.outcome]
 
   return (
     <div
@@ -138,7 +218,7 @@ const ReportCard: FC<{ report: RecentReport }> = ({ report }) => {
         borderRadius: '6px',
         padding: '10px 12px',
         marginBottom: '8px',
-        borderLeft: `3px solid ${color}`
+        borderLeft: `3px solid ${outcome.color}`
       }}
     >
       <div
@@ -151,11 +231,11 @@ const ReportCard: FC<{ report: RecentReport }> = ({ report }) => {
         <span
           style={{
             fontWeight: 'bold',
-            color,
+            color: outcome.color,
             fontSize: '13px'
           }}
         >
-          {label}
+          {outcome.label}
         </span>
         <span style={{ color: '#888', fontSize: '11px' }}>
           {formatDate(report.timestamp)}
@@ -171,8 +251,8 @@ const ReportCard: FC<{ report: RecentReport }> = ({ report }) => {
       >
         {[
           report.os ? `OS: ${report.os}` : null,
-          report.proton_version ? `Proton: ${report.proton_version}` : null,
-          report.is_steam_deck ? 'Steam Deck' : null
+          report.protonVersion ? `Proton: ${report.protonVersion}` : null,
+          report.isSteamDeck ? 'Steam Deck' : null
         ]
           .filter(Boolean)
           .join(' · ') || '—'}
@@ -434,15 +514,9 @@ export default function AnalysisModal({
   }
   const working_status = analysis.working_status
   const [gameName, setGameName] = useState<string>('—')
-  const [activeTab, setActiveTab] = useState<
-    'details' | 'chart' | 'reports' | 'versions' | 'settings'
-  >('details')
+  const [activeTab, setActiveTab] = useState<AnalysisTab>('details')
   const [history, setHistory] = useState<ReportHistory | undefined>()
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [recentReports, setRecentReports] = useState<
-    RecentReportsResponse | undefined
-  >()
-  const [reportsLoading, setReportsLoading] = useState(false)
   const [versionsData, setVersionsData] = useState<
     ProtonVersionsResponse | undefined
   >()
@@ -451,8 +525,303 @@ export default function AnalysisModal({
     SettingsTipsResponse | undefined
   >()
   const [settingsLoading, setSettingsLoading] = useState(false)
-  const REPORTS_PAGE_SIZE = 5
-  const [visibleReports, setVisibleReports] = useState(REPORTS_PAGE_SIZE)
+  const reportAppIdentityRef = useRef({ appId, generation: 0 })
+  if (reportAppIdentityRef.current.appId !== appId) {
+    reportAppIdentityRef.current = {
+      appId,
+      generation: reportAppIdentityRef.current.generation + 1
+    }
+  }
+  const reportAppGeneration = reportAppIdentityRef.current.generation
+  const [reportSelection, setReportSelection] = useState<{
+    appId: string
+    appGeneration: number
+    device: ReportDevice
+  }>({
+    appId,
+    appGeneration: reportAppGeneration,
+    device: 'steam-deck'
+  })
+  const reportDevice: ReportDevice =
+    reportSelection.appId === appId &&
+    reportSelection.appGeneration === reportAppGeneration
+      ? reportSelection.device
+      : 'steam-deck'
+  const currentReportScope = reportScope(appId, reportDevice)
+  const [reportsView, setReportsView] = useState<ReportsViewState>(() =>
+    emptyReportsView(appId, 'steam-deck')
+  )
+  const reportsViewRef = useRef(reportsView)
+  const appIdRef = useRef(appId)
+  const reportDeviceRef = useRef<ReportDevice>(reportDevice)
+  const activeTabRef = useRef<AnalysisTab>(activeTab)
+  const reportGenerationRef = useRef(0)
+  const activeReportRequestRef = useRef<ActiveReportRequest | null>(null)
+  const modalClosedRef = useRef(false)
+  const reportActivationPendingRef = useRef(false)
+
+  reportsViewRef.current = reportsView
+  activeTabRef.current = activeTab
+  if (appIdRef.current !== appId) {
+    reportGenerationRef.current += 1
+    activeReportRequestRef.current = null
+    appIdRef.current = appId
+    reportDeviceRef.current = 'steam-deck'
+    reportActivationPendingRef.current = false
+  } else {
+    reportDeviceRef.current = reportDevice
+  }
+
+  function replaceReportsView(next: ReportsViewState): void {
+    reportsViewRef.current = next
+    setReportsView(next)
+  }
+
+  function updateReportsView(
+    update: (current: ReportsViewState) => ReportsViewState
+  ): void {
+    const current = reportsViewRef.current
+    const next = update(current)
+    if (next === current) return
+    replaceReportsView(next)
+  }
+
+  function invalidateReportRequest(clearLoading: boolean): void {
+    reportGenerationRef.current += 1
+    activeReportRequestRef.current = null
+    if (!clearLoading || reportsViewRef.current.loadingPage === undefined) {
+      return
+    }
+    updateReportsView((current) => ({
+      ...current,
+      loadingPage: undefined
+    }))
+  }
+
+  function startReportRequest(page: number, dataset?: ReportDataset): void {
+    const requestAppId = appIdRef.current
+    const requestDevice = reportDeviceRef.current
+    const scope = reportScope(requestAppId, requestDevice)
+    const current = reportsViewRef.current
+
+    if (
+      modalClosedRef.current ||
+      reportLifetime.signal.aborted ||
+      activeTabRef.current !== 'reports' ||
+      current.scope !== scope ||
+      activeReportRequestRef.current !== null ||
+      (page > 1 &&
+        (!current.loaded || !dataset || !sameDataset(current.dataset, dataset)))
+    ) {
+      return
+    }
+
+    const token = reportGenerationRef.current + 1
+    reportGenerationRef.current = token
+    activeReportRequestRef.current = { token, scope, page, dataset }
+    updateReportsView((view) =>
+      view.scope === scope
+        ? {
+            ...view,
+            loadingPage: page,
+            errorPage: undefined
+          }
+        : view
+    )
+
+    const isCurrent = (): boolean => {
+      const activeRequest = activeReportRequestRef.current
+      return (
+        !modalClosedRef.current &&
+        !reportLifetime.signal.aborted &&
+        activeTabRef.current === 'reports' &&
+        appIdRef.current === requestAppId &&
+        reportDeviceRef.current === requestDevice &&
+        reportGenerationRef.current === token &&
+        activeRequest !== null &&
+        activeRequest.token === token &&
+        activeRequest.scope === scope &&
+        activeRequest.page === page &&
+        activeRequest.dataset === dataset
+      )
+    }
+
+    const fail = (): void => {
+      if (!isCurrent()) return
+      activeReportRequestRef.current = null
+      updateReportsView((view) =>
+        view.scope === scope
+          ? {
+              ...view,
+              loadingPage: undefined,
+              errorPage: page
+            }
+          : view
+      )
+    }
+
+    const request: ReportRequest = {
+      appId: requestAppId,
+      device: requestDevice,
+      page,
+      dataset,
+      isCurrent
+    }
+
+    let pending: Promise<ReportPage>
+    try {
+      pending = getReportPage(request)
+    } catch {
+      fail()
+      return
+    }
+
+    pending.then(
+      (nextPage) => {
+        if (!isCurrent()) return
+
+        const recoveredFirstPage =
+          page > 1 &&
+          nextPage.page === 1 &&
+          !sameDataset(dataset, nextPage.dataset)
+        if (
+          nextPage.appId !== requestAppId ||
+          nextPage.device !== requestDevice ||
+          (nextPage.page !== page && !recoveredFirstPage) ||
+          (nextPage.page > 1 && !sameDataset(dataset, nextPage.dataset))
+        ) {
+          fail()
+          return
+        }
+
+        const view = reportsViewRef.current
+        if (view.scope !== scope) return
+
+        let next: ReportsViewState
+        if (nextPage.page === 1) {
+          next = {
+            scope,
+            loaded: true,
+            dataset: nextPage.dataset,
+            page: nextPage.page,
+            perPage: nextPage.perPage,
+            total: nextPage.total,
+            reports: appendUniqueReports([], nextPage.reports),
+            visible: REPORTS_DISPLAY_INCREMENT
+          }
+        } else {
+          if (!view.loaded || !sameDataset(view.dataset, nextPage.dataset)) {
+            fail()
+            return
+          }
+          const reports = appendUniqueReports(view.reports, nextPage.reports)
+          next = {
+            ...view,
+            dataset: nextPage.dataset,
+            page: nextPage.page,
+            perPage: nextPage.perPage,
+            total: nextPage.total,
+            reports,
+            visible: Math.min(
+              view.visible + REPORTS_DISPLAY_INCREMENT,
+              reports.length
+            ),
+            loadingPage: undefined,
+            errorPage: undefined
+          }
+        }
+
+        activeReportRequestRef.current = null
+        replaceReportsView(next)
+      },
+      () => fail()
+    )
+  }
+
+  function selectTab(nextTab: AnalysisTab): void {
+    if (activeTabRef.current === nextTab) return
+    if (activeTabRef.current === 'reports') {
+      invalidateReportRequest(true)
+    }
+    activeTabRef.current = nextTab
+    setActiveTab(nextTab)
+  }
+
+  function selectReportDevice(device: ReportDevice): void {
+    if (appIdRef.current === appId && reportDeviceRef.current === device) {
+      return
+    }
+    invalidateReportRequest(false)
+    reportDeviceRef.current = device
+    const next = emptyReportsView(appId, device)
+    replaceReportsView(next)
+    setReportSelection({
+      appId,
+      appGeneration: reportAppGeneration,
+      device
+    })
+    reportActivationPendingRef.current = false
+  }
+
+  function activateReportControl(action: () => void): void {
+    if (reportActivationPendingRef.current) return
+    reportActivationPendingRef.current = true
+    queueMicrotask(() => {
+      reportActivationPendingRef.current = false
+    })
+    action()
+  }
+
+  function showMoreReports(): void {
+    const view = reportsViewRef.current
+    if (
+      view.scope !== reportScope(appIdRef.current, reportDeviceRef.current) ||
+      !view.loaded ||
+      view.loadingPage !== undefined ||
+      view.errorPage !== undefined
+    ) {
+      return
+    }
+    if (view.visible < view.reports.length) {
+      updateReportsView((current) => ({
+        ...current,
+        visible: Math.min(
+          current.visible + REPORTS_DISPLAY_INCREMENT,
+          current.reports.length
+        )
+      }))
+      return
+    }
+    if (
+      view.dataset &&
+      view.perPage > 0 &&
+      view.page * view.perPage < view.total
+    ) {
+      startReportRequest(view.page + 1, view.dataset)
+    }
+  }
+
+  function retryReports(): void {
+    const view = reportsViewRef.current
+    if (
+      view.errorPage === undefined ||
+      view.loadingPage !== undefined ||
+      (view.errorPage > 1 && !view.dataset)
+    ) {
+      return
+    }
+    startReportRequest(
+      view.errorPage,
+      view.errorPage > 1 ? view.dataset : undefined
+    )
+  }
+
+  function closeAnalysisModal(): void {
+    if (modalClosedRef.current) return
+    modalClosedRef.current = true
+    invalidateReportRequest(false)
+    closeModal?.()
+  }
 
   useEffect(() => {
     try {
@@ -464,6 +833,26 @@ export default function AnalysisModal({
       /* ignore */
     }
   }, [appId])
+  useEffect(() => {
+    setReportSelection((current) =>
+      current.appId === appId && current.appGeneration === reportAppGeneration
+        ? current
+        : {
+            appId,
+            appGeneration: reportAppGeneration,
+            device: 'steam-deck'
+          }
+    )
+  }, [appId, reportAppGeneration])
+
+  useEffect(
+    () => () => {
+      modalClosedRef.current = true
+      reportGenerationRef.current += 1
+      activeReportRequestRef.current = null
+    },
+    []
+  )
 
   useEffect(() => {
     if (activeTab === 'reports' && !history && !historyLoading) {
@@ -475,29 +864,6 @@ export default function AnalysisModal({
         })
         .catch(() => {
           setHistoryLoading(false)
-        })
-    }
-    if (activeTab === 'reports' && !recentReports && !reportsLoading) {
-      setReportsLoading(true)
-      getCachedReports(appId)
-        .then((cached) => {
-          if (cached?.reports?.length) {
-            setRecentReports(cached)
-            setReportsLoading(false)
-            return null
-          }
-          return getRecentReports(appId)
-        })
-        .then((fresh) => {
-          if (fresh === null) return
-          if (fresh?.reports?.length) {
-            setCachedReports(appId, fresh)
-          }
-          setRecentReports(fresh ?? undefined)
-          setReportsLoading(false)
-        })
-        .catch(() => {
-          setReportsLoading(false)
         })
     }
     if (activeTab === 'versions' && !versionsData && !versionsLoading) {
@@ -535,6 +901,25 @@ export default function AnalysisModal({
         })
     }
   }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'reports') return
+
+    const scope = reportScope(appId, reportDevice)
+    if (reportsViewRef.current.scope !== scope) {
+      replaceReportsView(emptyReportsView(appId, reportDevice))
+    }
+    const view = reportsViewRef.current
+    if (
+      !view.loaded &&
+      view.loadingPage === undefined &&
+      view.errorPage === undefined
+    ) {
+      startReportRequest(1)
+    }
+
+    return () => invalidateReportRequest(false)
+  }, [activeTab, appId, reportDevice])
 
   const trendIcon = TREND_ICONS[trend.direction] ?? '❓'
   const workingIcon = working_status
@@ -617,14 +1002,38 @@ export default function AnalysisModal({
       value: stats.recent_reports
     }
   ]
+  const currentReportsView =
+    reportsView.scope === currentReportScope
+      ? reportsView
+      : emptyReportsView(appId, reportDevice)
+  const visibleReportCount = Math.min(
+    currentReportsView.visible,
+    currentReportsView.reports.length
+  )
+  const hasNextReportPage =
+    currentReportsView.loaded &&
+    currentReportsView.perPage > 0 &&
+    currentReportsView.page * currentReportsView.perPage <
+      currentReportsView.total
+  const canShowMoreReports =
+    currentReportsView.loaded &&
+    (visibleReportCount < currentReportsView.reports.length ||
+      hasNextReportPage)
+  const reportsRemaining = Math.max(
+    currentReportsView.total - visibleReportCount,
+    0
+  )
+  const selectedReportOption =
+    REPORT_DEVICE_OPTIONS.find((option) => option.device === reportDevice)
+      ?.data ?? 0
 
   return (
     <ConfirmModal
       strTitle=" "
       strOKButtonText="Close"
       bAlertDialog
-      onOK={closeModal}
-      onCancel={closeModal}
+      onOK={closeAnalysisModal}
+      onCancel={closeAnalysisModal}
       bHideCloseIcon={false}
     >
       <style>
@@ -679,29 +1088,29 @@ export default function AnalysisModal({
       >
         <Focusable
           style={tabStyle(activeTab === 'details')}
-          onClick={() => setActiveTab('details')}
-          onActivate={() => setActiveTab('details')}
+          onClick={() => selectTab('details')}
+          onActivate={() => selectTab('details')}
         >
           Details
         </Focusable>
         <Focusable
           style={tabStyle(activeTab === 'reports')}
-          onClick={() => setActiveTab('reports')}
-          onActivate={() => setActiveTab('reports')}
+          onClick={() => selectTab('reports')}
+          onActivate={() => selectTab('reports')}
         >
           Reports
         </Focusable>
         <Focusable
           style={tabStyle(activeTab === 'versions')}
-          onClick={() => setActiveTab('versions')}
-          onActivate={() => setActiveTab('versions')}
+          onClick={() => selectTab('versions')}
+          onActivate={() => selectTab('versions')}
         >
           Versions
         </Focusable>
         <Focusable
           style={tabStyle(activeTab === 'settings')}
-          onClick={() => setActiveTab('settings')}
-          onActivate={() => setActiveTab('settings')}
+          onClick={() => selectTab('settings')}
+          onActivate={() => selectTab('settings')}
         >
           Settings
         </Focusable>
@@ -742,13 +1151,15 @@ export default function AnalysisModal({
         <div style={{ padding: '4px' }}>
           <div
             style={{
-              fontSize: '12px',
               color: '#888',
               marginBottom: '8px',
               textAlign: 'center'
             }}
           >
-            {gameName} — Last 5 years
+            <div style={{ fontSize: '12px', marginBottom: '2px' }}>
+              {gameName}
+            </div>
+            <div style={{ fontSize: '11px' }}>All systems — Last 5 years</div>
           </div>
           {historyLoading ? (
             <div
@@ -774,7 +1185,22 @@ export default function AnalysisModal({
             }}
           />
 
-          {reportsLoading ? (
+          <DropdownItem
+            label="Individual reports"
+            description="Choose which systems to include"
+            menuLabel="Report device"
+            rgOptions={REPORT_DEVICE_DROPDOWN_OPTIONS}
+            selectedOption={selectedReportOption}
+            onChange={(selected: { data: number; label: string }) => {
+              const option = REPORT_DEVICE_OPTIONS.find(
+                (candidate) => candidate.data === selected.data
+              )
+              if (option) selectReportDevice(option.device)
+            }}
+          />
+
+          {!currentReportsView.loaded &&
+          currentReportsView.errorPage === undefined ? (
             <div
               style={{
                 color: '#888',
@@ -784,7 +1210,36 @@ export default function AnalysisModal({
             >
               Loading...
             </div>
-          ) : recentReports?.reports?.length ? (
+          ) : !currentReportsView.loaded ? (
+            <div
+              style={{
+                color: '#aaa',
+                textAlign: 'center',
+                padding: '32px 0'
+              }}
+            >
+              <div style={{ marginBottom: '10px' }}>
+                {reportDevice === 'steam-deck'
+                  ? 'Unable to load Steam Deck reports'
+                  : 'Unable to load reports'}
+              </div>
+              <Focusable
+                style={{
+                  display: 'inline-block',
+                  padding: '8px 18px',
+                  fontSize: '12px',
+                  color: '#7ab3f0',
+                  cursor: 'pointer',
+                  background: 'rgba(122,179,240,0.08)',
+                  borderRadius: '6px'
+                }}
+                onClick={() => activateReportControl(retryReports)}
+                onActivate={() => activateReportControl(retryReports)}
+              >
+                Retry
+              </Focusable>
+            </div>
+          ) : currentReportsView.reports.length > 0 ? (
             <ScrollPanelGroup>
               <ScrollPanel>
                 <Focusable
@@ -792,11 +1247,23 @@ export default function AnalysisModal({
                   //@ts-ignore
                   flow-children="column"
                 >
-                  {recentReports.reports
-                    .slice(0, visibleReports)
-                    .map((report, i) => (
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: '#888',
+                      marginBottom: '8px',
+                      textAlign: 'center'
+                    }}
+                  >
+                    {visibleReportCount} shown ·{' '}
+                    {currentReportsView.reports.length} of{' '}
+                    {currentReportsView.total} loaded
+                  </div>
+                  {currentReportsView.reports
+                    .slice(0, visibleReportCount)
+                    .map((report) => (
                       <Focusable
-                        key={i}
+                        key={report.id}
                         onFocus={(e: React.FocusEvent) =>
                           (e.target as HTMLElement).scrollIntoView({
                             behavior: 'smooth',
@@ -807,37 +1274,60 @@ export default function AnalysisModal({
                         <ReportCard report={report} />
                       </Focusable>
                     ))}
-                  {visibleReports < recentReports.reports.length && (
+                  {currentReportsView.errorPage !== undefined && (
+                    <div
+                      style={{
+                        color: '#aaa',
+                        textAlign: 'center',
+                        padding: '8px 0'
+                      }}
+                    >
+                      Unable to load more reports
+                    </div>
+                  )}
+                  {(currentReportsView.errorPage !== undefined ||
+                    canShowMoreReports) && (
                     <Focusable
+                      key="report-pagination"
+                      aria-disabled={
+                        currentReportsView.loadingPage !== undefined
+                      }
                       style={{
                         textAlign: 'center',
                         padding: '10px 0',
                         fontSize: '12px',
-                        color: '#7ab3f0',
-                        cursor: 'pointer',
+                        color:
+                          currentReportsView.loadingPage !== undefined
+                            ? '#888'
+                            : '#7ab3f0',
+                        cursor:
+                          currentReportsView.loadingPage !== undefined
+                            ? 'default'
+                            : 'pointer',
                         background: 'rgba(122,179,240,0.08)',
                         borderRadius: '6px',
                         marginTop: '4px'
                       }}
                       onClick={() =>
-                        setVisibleReports((p) =>
-                          Math.min(
-                            p + REPORTS_PAGE_SIZE,
-                            recentReports.reports.length
-                          )
+                        activateReportControl(
+                          currentReportsView.errorPage !== undefined
+                            ? retryReports
+                            : showMoreReports
                         )
                       }
                       onActivate={() =>
-                        setVisibleReports((p) =>
-                          Math.min(
-                            p + REPORTS_PAGE_SIZE,
-                            recentReports.reports.length
-                          )
+                        activateReportControl(
+                          currentReportsView.errorPage !== undefined
+                            ? retryReports
+                            : showMoreReports
                         )
                       }
                     >
-                      Show more ({recentReports.reports.length - visibleReports}{' '}
-                      remaining)
+                      {currentReportsView.loadingPage !== undefined
+                        ? 'Loading more...'
+                        : currentReportsView.errorPage !== undefined
+                          ? 'Retry'
+                          : `Show more (${reportsRemaining} remaining)`}
                     </Focusable>
                   )}
                 </Focusable>
@@ -851,7 +1341,9 @@ export default function AnalysisModal({
                 padding: '40px 0'
               }}
             >
-              No recent reports available
+              {reportDevice === 'steam-deck'
+                ? 'No Steam Deck reports available'
+                : 'No reports available'}
             </div>
           )}
         </div>

@@ -52,20 +52,6 @@ export interface ReportHistory {
   months: MonthlyReportCount[]
 }
 
-export interface RecentReport {
-  timestamp: number
-  rating: string
-  proton_version?: string
-  notes?: string
-  os?: string
-  is_steam_deck: boolean
-}
-
-export interface RecentReportsResponse {
-  app_id: number
-  reports: RecentReport[]
-}
-
 export interface ProtonVersionStat {
   version: string
   total_reports: number

@@ -3,7 +3,6 @@ import { GATEWAY_BASE_URL, GATEWAY_API_KEY } from '../constants'
 import {
   GatewayAnalysis,
   ReportHistory,
-  RecentReportsResponse,
   ProtonVersionsResponse,
   SettingsTipsResponse
 } from '../../types/gateway'
@@ -123,33 +122,6 @@ export async function getProtonVersions(
       return await safeJson(res)
     }
   } catch {
-    return undefined
-  }
-  return undefined
-}
-
-export async function getRecentReports(
-  appId: string
-): Promise<RecentReportsResponse | undefined> {
-  try {
-    const res = await fetchWithTimeout(
-      fetchNoCors(
-        `${GATEWAY_BASE_URL}/api/v1/reports/recent/${appId}?limit=20`,
-        {
-          method: 'GET',
-          headers: {
-            'X-API-Key': GATEWAY_API_KEY
-          }
-        }
-      ),
-      5000
-    )
-
-    if (res.status === 200) {
-      return await safeJson(res)
-    }
-  } catch (error) {
-    // silently fail recent reports fetch failed:', error)
     return undefined
   }
   return undefined
