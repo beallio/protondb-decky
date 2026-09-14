@@ -33,7 +33,6 @@ Later fork releases also include these changes.
 | **Reused game-cover fix** — an icon no longer carries over to a different game when Steam reuses a cover in the grid. | `1.3.3+beallio.2` | — | Not submitted |
 | **ProtonDB fallback lookup** — when Steam returns no matching game, search the SteamDB title index used by ProtonDB. This can find some delisted non-Steam games, such as *TRANSFORMERS: Devastation*. | `1.3.3+beallio.3` | — | Not submitted |
 | **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | `1.3.3+beallio.3` | — | Not submitted |
-| **Complete installation package** — release archives include the settings file required for the plugin to start. | `1.3.3+beallio.3` | — | Not submitted |
 | **Steam Deck report filter** — individual reports come directly from ProtonDB and default to Steam Deck. Choose All systems or use Show more to read additional reports. | `1.3.3+beallio.4` | — | Not submitted |
 
 Once a change is merged upstream it is dropped from this table and from the fork's
