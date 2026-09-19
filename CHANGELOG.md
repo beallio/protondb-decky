@@ -1,7 +1,7 @@
 # Changelog
 All important changes to the ProtonDB Badges plugin are documented here.
 
-## [Unreleased]
+## [1.3.4+beallio.1] - 2026-09-19
 ### Changed
 - Rebased the fork onto upstream `main` at `95ce265` on 2026-09-19, after
   upstream v1.3.4. This brings in Steam client compatibility fixes, collapsible
@@ -11,7 +11,7 @@ All important changes to the ProtonDB Badges plugin are documented here.
   on 2026-09-19. The focus-only icon option,
   [PR #8](https://github.com/bschelst/protondb-decky/pull/8), remains open.
 - Kept the fork's shortcut matching, cover-icon fixes, React cover icons, and
-  Steam Deck report filter. No new fork release has been published.
+  Steam Deck report filter.
 
 ## [1.3.3+beallio.4] - 2026-09-13
 ### Changed

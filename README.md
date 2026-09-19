@@ -39,10 +39,10 @@ Statuses checked on 2026-09-19.
 Merged changes stay in this table for reference. They now come from upstream
 instead of a separate fork patch.
 
-The current source is rebased onto upstream `main` at
+Release `1.3.4+beallio.1` is rebased onto upstream `main` at
 [`95ce265`](https://github.com/bschelst/protondb-decky/commit/95ce265b985ade09a81361f992f489508134539c),
-after upstream v1.3.4. These upstream updates are not yet in a published fork ZIP.
-The latest fork release remains `1.3.3+beallio.4`.
+after upstream v1.3.4. It includes these upstream updates and all changes from
+the previous fork release, `1.3.3+beallio.4`.
 
 ### Installing a fork build
 
