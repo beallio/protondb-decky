@@ -19,15 +19,16 @@ Status icons on Home and Library game covers show whether a game is reported to 
 > `v1.3.3+beallio.1` is the fork's first build on top of upstream v1.3.3.
 > Fork releases are published on the `fork-main` branch; `main` mirrors upstream unchanged.
 
-### Changes in this fork awaiting upstream integration
+### Fork changes and upstream status
 
 **First fork release** identifies the first published version with each change.
 Later fork releases also include these changes.
+Statuses checked on 2026-09-19.
 
 | Change | First fork release | Upstream PR | Status |
 |---|---|---|---|
 | **Focus-only library icons** — show cover icons only while a game is focused or hovered, instead of on every cover. | `1.3.3+beallio.1` | [bschelst#8](https://github.com/bschelst/protondb-decky/pull/8) | Open |
-| **Version display fix** — the plugin's About section reads the installed version from the package, so it no longer shows an old number. | `1.3.3+beallio.1` | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Open |
+| **Version display fix** — the plugin's About section reads the installed version from the package, so it no longer shows an old number. | `1.3.3+beallio.1` | [bschelst#6](https://github.com/bschelst/protondb-decky/pull/6) | Merged (closed) on 2026-09-19 |
 | **Non-Steam shortcut matching** — improved title matching through Steam Store search finds more games, including *Assassin's Creed: Director's Cut* and *Prince of Persia: The Lost Crown*. Demo and DLC entries are rejected. | `1.3.3+beallio.2` | — | Not submitted |
 | **Game-page rating fix** — game pages no longer show a temporary `pending` rating from cover-icon lookups. | `1.3.3+beallio.2` | — | Not submitted |
 | **Reused game-cover fix** — an icon no longer carries over to a different game when Steam reuses a cover in the grid. | `1.3.3+beallio.2` | — | Not submitted |
@@ -35,8 +36,13 @@ Later fork releases also include these changes.
 | **Home and Library icon update** — cover icons align with Steam's own icons, use its focus fade, and update without leaving the page when enabled or disabled. | `1.3.3+beallio.3` | — | Not submitted |
 | **Steam Deck report filter** — individual reports come directly from ProtonDB and default to Steam Deck. Choose All systems or use Show more to read additional reports. | `1.3.3+beallio.4` | — | Not submitted |
 
-Once a change is merged upstream it is dropped from this table and from the fork's
-own patch set at the next rebase onto upstream.
+Merged changes stay in this table for reference. They now come from upstream
+instead of a separate fork patch.
+
+The current source is rebased onto upstream `main` at
+[`95ce265`](https://github.com/bschelst/protondb-decky/commit/95ce265b985ade09a81361f992f489508134539c),
+after upstream v1.3.4. These upstream updates are not yet in a published fork ZIP.
+The latest fork release remains `1.3.3+beallio.4`.
 
 ### Installing a fork build
 
