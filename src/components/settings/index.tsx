@@ -2,7 +2,7 @@ import {
   ButtonItem,
   ButtonItemProps,
   DropdownItem,
-  Field,
+  Focusable,
   Navigation,
   PanelSection,
   PanelSectionProps,
@@ -11,8 +11,19 @@ import {
   ToggleField
 } from '@decky/ui'
 import { toaster } from '@decky/api'
-import React, { FC, ReactNode } from 'react'
-import { FaChartBar, FaGithub, FaGlobe, FaQuestionCircle } from 'react-icons/fa'
+import React, { FC, ReactNode, useState } from 'react'
+import {
+  FaChartBar,
+  FaChevronDown,
+  FaChevronUp,
+  FaGithub,
+  FaGlobe,
+  FaLink,
+  FaQuestionCircle,
+  FaShoppingCart,
+  FaStar,
+  FaTrash
+} from 'react-icons/fa'
 import { clearCache } from '../../cache/protobDbCache'
 import { PLUGIN_VERSION } from '../../constants'
 import useTranslations from '../../hooks/useTranslations'
@@ -39,6 +50,44 @@ type ExtendedButtonItemProps = ButtonItemProps & {
 }
 
 const DeckButtonItem = ButtonItem as FC<ExtendedButtonItemProps>
+
+const CollapsibleSection: FC<{
+  title: string
+  icon: ReactNode
+  defaultExpanded?: boolean
+  children: ReactNode
+}> = ({ title, icon, defaultExpanded = false, children }) => {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
+  const [isFocused, setIsFocused] = useState(false)
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <Focusable
+        onActivate={() => setIsExpanded(!isExpanded)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px',
+          cursor: 'pointer',
+          borderRadius: '4px',
+          background: isFocused ? 'rgba(207, 181, 59, 0.15)' : 'transparent',
+          transition: 'background 0.2s ease'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {icon}
+          <span>{title}</span>
+        </div>
+        {isExpanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
+      </Focusable>
+
+      {isExpanded && <div style={{ paddingLeft: '4px' }}>{children}</div>}
+    </div>
+  )
+}
 
 export default function Index() {
   const {
@@ -199,7 +248,11 @@ export default function Index() {
           />
         </DeckPanelSectionRow>
       </DeckPanelSection>
-      <DeckPanelSection title={t('sectionStore')}>
+
+      <CollapsibleSection
+        title={t('sectionStore')}
+        icon={<FaShoppingCart size={14} />}
+      >
         <DeckPanelSectionRow>
           <ToggleField
             label={t('enableStoreBadge')}
@@ -210,8 +263,12 @@ export default function Index() {
             }}
           />
         </DeckPanelSectionRow>
-      </DeckPanelSection>
-      <DeckPanelSection title={t('sectionEnhancedFeatures')}>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title={t('sectionEnhancedFeatures')}
+        icon={<FaStar size={14} />}
+      >
         <DeckPanelSectionRow>
           <ToggleField
             label={t('showAnalysisButton')}
@@ -260,8 +317,9 @@ export default function Index() {
               />
             </DeckPanelSectionRow>
           )}
-      </DeckPanelSection>
-      <DeckPanelSection title={t('caching')}>
+      </CollapsibleSection>
+
+      <CollapsibleSection title={t('caching')} icon={<FaTrash size={14} />}>
         <DeckPanelSectionRow>
           <DeckButtonItem
             label={t('clearCacheLabel')}
@@ -279,8 +337,9 @@ export default function Index() {
             {t('clearCache')}
           </DeckButtonItem>
         </DeckPanelSectionRow>
-      </DeckPanelSection>
-      <DeckPanelSection title={t('sectionLinks')}>
+      </CollapsibleSection>
+
+      <CollapsibleSection title={t('sectionLinks')} icon={<FaLink size={14} />}>
         <DeckPanelSectionRow>
           <DeckButtonItem
             bottomSeparator="standard"
@@ -335,19 +394,18 @@ export default function Index() {
             </div>
           </DeckButtonItem>
         </DeckPanelSectionRow>
-      </DeckPanelSection>
-      <DeckPanelSection title={t('sectionAbout')}>
-        <DeckPanelSectionRow>
-          <Field label={t('name')} bottomSeparator="standard">
-            ProtonDB Badges
-          </Field>
-        </DeckPanelSectionRow>
-        <DeckPanelSectionRow>
-          <Field label={t('version')} bottomSeparator="none">
-            {PLUGIN_VERSION}
-          </Field>
-        </DeckPanelSectionRow>
-      </DeckPanelSection>
+      </CollapsibleSection>
+
+      <div
+        style={{
+          textAlign: 'center',
+          padding: '12px 0 4px',
+          fontSize: '12px',
+          opacity: 0.5
+        }}
+      >
+        ProtonDB Badges v{PLUGIN_VERSION}
+      </div>
     </div>
   )
 }
